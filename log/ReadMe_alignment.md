@@ -1,5 +1,5 @@
 **Table of Content**
-- [Data processing steps for the human primary cell project](#data-processing-steps-for-the-human-primary-cell-project)
+  - [Data processing steps for the human primary cell project](#data-processing-steps-for-the-human-primary-cell-project)
   - [reference genome](#reference-genome)
   - [Primary celltypes](#primary-celltypes)
   - [Data organization](#data-organization)
