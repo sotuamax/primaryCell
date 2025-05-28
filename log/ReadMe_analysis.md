@@ -14,15 +14,14 @@
   - [x] update RSEM gene quantity by applying custom cutoffs on the BAM file (unique and contain MAPQ > 30); 
   - [x] gene filtering on expression data (featureCount and TPM), note that TPM is preferred in between sample comparisons; 
   - [x] loop frequency is correlated with gene expression (this is seen in high interaction loci, and its overlapping genes are constitutively highly expressed.)
-  - [?] adapt ABC model for the analysis of loop contact frequencies and expression variation; 
-  - [ ] start from differentially expressed genes, and see how the loop interactions vary; 
+  - [ ] adapt ABC model for the analysis of loop contact frequencies and expression variation; 
+  - [x] start from differentially expressed genes, and see how the loop interactions vary (expression is correlated with contact variation); 
   - [ ] concerted analysis on variable DHS/loops and enriched motif and TF; 
-  - [ ] examine the quality of loop annotation; 
-  - [ ] add H3K27ac to loop understanding; 
-  - [ ] TAD & its relationship with AG loops; 
+  - [x] examine the quality of loop annotation; 
+  - [x] add H3K27ac to loop understanding; 
+  - [x] TAD & its relationship with AG loops; 
   - [ ] classify genes into GG-prone, or IG-prone; 
   - [ ] For genes overweighted by GG-loops, check the Gene-gene expression relations; 
-  - [ ] what is chromatin stripes in landscape ? stripe peak? 
   - [ ] **linear mixed effect model apply on DNase-seq for testing**
   - [x] genome-wide signal profile correlation between DNase and Hi-TrAC; 
   - [x] use DNase signal to find open TSS + gene expressed to filter gene for further consideration about its regulation by loop interactions (**no longer consider**);
