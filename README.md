@@ -1,5 +1,5 @@
 # primaryCell
-scripts developed for the primary cell project which includes hi-c, dnase, rna-seq data
+scripts developed for the primary cell project which includes Hi-TrAC, DNase, RNA-seq data.
 
 - To generate HiC/cool/pairs format based on BAM input, use: 
   `hic_format.py`
