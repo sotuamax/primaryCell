@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
 This program is to generate unified peaks from multiple peaks data (summited based clustering). 
+
 Input:  
     required: 
     - peak (in narrowPeak format); 
+    - output prefix;
     optional: 
     - min_dist: distance used for summit clustering; 
     - min_score: used to filter peak on score; 
     - min_fc: used  to fileter peak on fc; 
-    - saf: generate saf format output
+    - saf: to generate saf format output
 
 """
 

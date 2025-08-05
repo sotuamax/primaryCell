@@ -1,6 +1,26 @@
 #!/usr/bin/env python 
 """
-Annotate loops based on gene transcript select
+Annotate loops based on gene annotation. 
+
+annotate loop anchors first, and mirror anchor annotation 
+onto loop and assign loop annotation group. 
+
+anchor annotation sequence: 
+- promoter anchor annotated; 
+- anchor not overlapping promoter but with gene body; 
+- anchor not overlapping with either promoter or gene body; 
+
+Note: for loops overlapping with multiple genes, it can be annotated multiple times, one annotation per gene. 
+for example: 
+chr7	26857036	26858582	chr7	27146890	27147195	GG=[SKAP2]-[HOXA3]
+chr7	26857036	26858582	chr7	27146890	27147195	GG=[SKAP2]-[HOXA6]
+
+
+required: 
+- bedpe: bedpe input;
+- output: output prefix 
+optional: 
+- gene: gene 
 
 """
 import pandas as pd 
@@ -14,11 +34,11 @@ import argparse
 
 def args_parser():
     '''parser the argument from terminal command'''
-    parser=argparse.ArgumentParser(prog = "PROG", formatter_class = argparse.RawDescriptionHelpFormatter, description="\
-                                   loop_annotation.py sample.bedpe -min_")
+    parser=argparse.ArgumentParser(prog = "PROG", formatter_class = argparse.RawDescriptionHelpFormatter, add_help=True, 
+                                   usage="\nloop_annotation.py sample.bedpe -o <out>")
     parser.add_argument("bedpe", help = "input bedpe file (loop interactions)")
-    parser.add_argument("-transcript", "--transcript", default = "/data/jim4/Reference/human/GRCh38.p14/GTF/ncbiRefSeqSelect.bed", help = "Input transcript file")
-    parser.add_argument("-o", "--output", help = "output name")
+    parser.add_argument("-gene", "--gene", default = "/data/jim4/Reference/human/GRCh38.p14/GTF/ncbiRefSeqSelect.bed", help = "Input gene bed")
+    parser.add_argument("-o", "--output", required = True, help = "output name")
     args=parser.parse_args()
     return args
 
@@ -30,11 +50,6 @@ def find_TSS(transcript_df):
     transcript_df_new["pos"] = np.where(transcript_df_new["strand"] == "-", transcript_df_new["end"], transcript_df_new["start"])
     transcript_df_new['start'] = transcript_df_new["pos"] - 500; transcript_df_new["end"] = transcript_df_new["pos"] + 500
     return transcript_df_new.drop("pos", axis = 1)
-
-def loop_anchor(loop_df):
-    l_df = loop_df.copy()
-    loop_anchor = pd.concat([l_df[["chrom1", 'start1', "end1"]].rename(columns = {"chrom1":"chrom", "start1":"start", "end1":"end"}), l_df[["chrom2", "start2", "end2"]].rename(columns = {"chrom2":"chrom", "start2":"start", "end2":"end"})], axis = 0).drop_duplicates(keep = "first", ignore_index=True)
-    return loop_anchor 
 
 def annotate_anchor(loop_anchor, transcript_df):
     """
@@ -162,10 +177,15 @@ def group_loop(loop_ann_input):
 
 def main():
     args = args_parser()
+    print("Read bedpe file ...")
     loop_df = pd.read_table(args.bedpe, sep = "\t", header = None, names = ["chrom1", 'start1', "end1", "chrom2", "start2", "end2"])
     # "/data/jim4/Reference/human/GRCh38.p14/GTF/select.transcript.GCF_000001405.40_GRCh38.p14_genomic.bed"
-    transcript_df = pd.read_table(args.transcript, sep = "\t", header = None, names = ["chrom", "start", "end", "gene", "strand"])
-    anchor_df = loop_anchor(loop_df)
+    print("Read gene transcript file ...")
+    transcript_df = pd.read_table(args.gene, sep = "\t", header = None, names = ["chrom", "start", "end", "gene", "strand"])
+    # get anchor from bedpe 
+    print("Get loop anchors ...")
+    from utilities.bed_tools import pe2bed
+    anchor_df = pe2bed(loop_df)
     print("Annotate anchors ...")
     anchor_ann = annotate_anchor(anchor_df, transcript_df)
     # 
@@ -181,3 +201,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

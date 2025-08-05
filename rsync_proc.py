@@ -9,9 +9,12 @@ import pandas as pd
 Given the file path in the source location, use rsync to transfer indicated file (GC) to the destination.
 
 example: 
-rsync -C -P -e ssh jim4@137.187.135.165:/mnt/usbdisk/fastq_backup/file_*.json . # get json file 
-rsync_proc.py file_*.json GC.txt -d . > rsyn.sh # generate bash file for data transfering 
-sh ./rsyn.sh # run rsync 
+# get json path file 
+rsync -C -P -e ssh jim4@137.187.135.165:/mnt/usbdisk/fastq_backup/file_path.json . 
+# generate bash file for data transfering 
+rsync_proc.py file_path.json GC.txt -d . > rsyn.sh 
+# run rsync 
+sh ./rsyn.sh 
 """
 
 def args_parser():
@@ -19,9 +22,9 @@ def args_parser():
     parser=argparse.ArgumentParser(prog = "PROG", formatter_class = argparse.RawDescriptionHelpFormatter, description="\n \
             Given the file path in the source location, use rsync to transfer indicated files (GC) to the destination. \n \
             example: \n \
-            rsync -C -P -e ssh jim4@137.187.135.165:/mnt/usbdisk/fastq_backup/file_*.json . \n \
-            rsync_proc.py file_*.json GC.txt > rsyn.sh \n \
-            sh ./rsyn.sh ")
+            rsync -C -P -e ssh jim4@137.187.135.165:/mnt/usbdisk/fastq_backup/file_path.json . \n \
+            rsync_proc.py file_path.json GC.txt > rsyn.sh \n \
+            sh rsyn.sh ")
     parser.add_argument("json_path", help="json file contain all file path")
     parser.add_argument("GC_file", help = "GC number of interest for transfering/downloading")
     # parser.add_argument("-dir", "--directory", help = "master directory for all files", required = False)
@@ -38,15 +41,18 @@ def remote_transfer(json_path, GC_list, destination):
     with open(json_path, "r") as file:
         all_files = json.load(file)
     for dir in all_files:
-        file_list = [os.path.join(dir, f) for f in all_files[dir] if f.split("_")[0] in GC_list]
-        if len(file_list) > 0:
-            all_file4transfer = " :".join(file_list)
-            run_number = os.path.basename(dir).split("_")[0]
-            if not os.path.exists(os.path.join(destination, run_number)): 
-                os.mkdir(os.path.join(destination, run_number))
-            output_folder = os.path.join(destination, run_number)
-            command = f"rsync -C -P -e ssh jim4@137.187.135.165:{all_file4transfer} {output_folder}"
+        file_df = pd.DataFrame([(dir,f) for f in all_files[dir] if f.split("_")[0] in GC_list], columns = ["directory", "file"])
+        if len(file_df) > 0:
+            for dir,dir_f in file_df.groupby("directory"):
+                # all_file4transfer = " :".join(file_list)
+                run_number = os.path.basename(dir).split("_")[0]
+                dir_f[['file']].to_csv(run_number + ".download", sep = "\t", header = False, index = False)
+                if not os.path.exists(os.path.join(destination, run_number)): 
+                    os.mkdir(os.path.join(destination, run_number))
+                output_folder = os.path.join(destination, run_number)
+                command = f"rsync -av --update --files-from={run_number}.download -C -P -e ssh jim4@137.187.135.165:{dir} {output_folder}"
             print(command)
+            # -a : archive mode (preserve modification time)
             # subprocess.call(command, shell = True)
 
 def main():

@@ -1,12 +1,25 @@
 
 import subprocess 
 import os 
-import logging
 import pandas as pd
-from utility import module_load 
 
+def BT_SE(r1, ref, output, n):
+    """
+    BOWTIE aligner
+    """
+    bowtie_command = f"bowtie2 -x {ref} -U {r1} -S {output} "
+    return (bowtie_command)
 
-def STAR_SE(r1, index_dir, gtf, output, n):
+def is_gzip_file(file):
+    with open(file, 'rb') as f:
+        magic = f.read(2)
+        return magic == b'\x1f\x8b'
+
+def flagstat(bam, n, out):
+    command = f"samtools flagstat {bam} -@ {n} > {out}"
+    subprocess.call(command, shell = True)
+
+def STAR_SE(r1, index_dir, gtf, output, n, enable_novel = True):
     """"
     Perform single-end (SE) read alignment using STAR
     Input: 
@@ -18,25 +31,26 @@ def STAR_SE(r1, index_dir, gtf, output, n):
     Output: 
     None
     """
-    command = f"STAR --runThreadN {n} --genomeDir {index_dir} --sjdbGTFfile {gtf} --readFilesIn {r1} --outFileNamePrefix {output} --outSAMtype BAM SortedByCoordinate && samtools index -@ {n} {output}Aligned.sortedByCoord.out.bam" # disable twopassMode: --twopassMode Basic 
-    if r1.endswith(".gz"):
-        commmand += " --readFilesCommand zcat"
-    modules = ["STAR", "samtools"]
-    my_env = module_load(modules)
-    # 
-    subprocess.call(command, shell = True, env = my_env)
+    command = f"STAR --runThreadN {n} --genomeDir {index_dir} --sjdbGTFfile {gtf} --readFilesIn {r1} --outFileNamePrefix {output} --outSAMtype BAM SortedByCoordinate"
+    if is_gzip_file(r1):
+        command += " --readFilesCommand zcat " # disable twopassMode: --twopassMode Basic 
+    if not enable_novel:
+        command += " --alignSJDBoverhangMin 1 \
+                    --alignSJoverhangMin 1000000 \
+                    --alignIntronMin 1000000 \
+                    --alignIntronMax 1 \
+                    --outFilterIntronMotifs RemoveNoncanonical "
+    # generate index for BAM 
+    command += f" && mv {output}Aligned.sortedByCoord.out.bam {output}.bam && samtools index -@ {n} {output}.bam"
+    print(command)
+    subprocess.call(command, shell = True)
     # remove temporatory directories when exists
     import shutil 
-    if os.path.exists(f"{output}_STARgenome"):
-        try:
-            shutil.rmtree(f"{output}_STARgenome")
-        except Exception as e:
-            print(e)
-    if os.path.exists(f"{output}_STARpass1"):
-        try:
-            shutil.rmtree(f"{output}_STARpass1")
-        except Exception as e:
-            print(e)
+    try:
+        shutil.rmtree(f"{output}_STARgenome")
+        shutil.rmtree(f"{output}_STARpass1")
+    except Exception as e:
+        pass
 
 def STAR_PE(r1, r2, star_index, gtf, name, thread):
     """
@@ -54,21 +68,14 @@ def STAR_PE(r1, r2, star_index, gtf, name, thread):
     STAR_process = f"STAR --runThreadN {thread} --genomeDir {star_index} --sjdbGTFfile {gtf} --readFilesIn {r1} {r2} --twopassMode Basic --sjdbOverhang 50 --outFileNamePrefix {name} --outSAMtype BAM SortedByCoordinate && samtools index -@ {thread} {name}Aligned.sortedByCoord.out.bam"
     if r1.endswith(".gz"):
         STAR_process += " --readFilesCommand zcat"
-    modules = ["STAR", "samtools"]
-    my_env = module_load(modules)
-    subprocess.call(STAR_process, shell = True, env = my_env)
+    subprocess.call(STAR_process, shell = True)
     # remove temporatory directories when exists
     import shutil 
-    if os.path.exists(f"{name}_STARgenome"):
-        try:
-            shutil.rmtree(f"{name}_STARgenome")
-        except Exception as e:
-            print(e)
-    if os.path.exists(f"{name}_STARpass1"):
-        try:
-            shutil.rmtree(f"{name}_STARpass1")
-        except Exception as e:
-            print(e)
+    try:
+        shutil.rmtree(f"{output}_STARgenome")
+        shutil.rmtree(f"{output}_STARpass1")
+    except Exception as e:
+        pass
 
 def BWA_SE(r1, ref, output, n):
     """
@@ -81,12 +88,10 @@ def BWA_SE(r1, ref, output, n):
     Output: 
     None
     """
-    command = f"bwa mem -t {n} {ref} {r1} -L 0,0 | samtools view -@ {n} -Su - | samtools sort -@ {n} - -o {output}.bam && samtools index -@ {n} {output}.bam"
+    command = f"bwa mem -t {n} {ref} {r1} | samtools view -@ {n} -Su - | samtools sort -@ {n} - -o {output}.bam && samtools index -@ {n} {output}.bam"
     # logging.info(f"Command\t{command}")
-    # print(command)
-    modules = ["bwa", "samtools"]
-    my_env = module_load(modules)
-    subprocess.call(command, shell = True, env = my_env)
+    print(command)
+    subprocess.call(command, shell = True)
 
 def BWA_PE(r1, r2, ref, output, n):
     """
@@ -101,71 +106,21 @@ def BWA_PE(r1, r2, ref, output, n):
     None
     """
     align_command = f"bwa mem -t {n} {ref} {r1} {r2} | samtools view -@ {n} -Su - | samtools sort -@ {n} - -o {output}.bam && samtools index -@ {n} {output}.bam"
-    modules = ["bwa", "samtools"]
-    my_env = module_load(modules)
-    subprocess.call(align_command, shell = True, env = my_env)
-
-def STAR_log(output):
-    with open(output, "r") as fr:
-        for line in fr.readlines():
-            line = line.strip()
-            if "Number of input reads |" in line:
-                input_r = line.split("Number of input reads |\t")[-1]
-            if "Uniquely mapped reads number |" in line or "Uniquely mapped reads % |" in line:
-                if "Uniquely mapped reads number |" in line:
-                    unique_r = line.split("Uniquely mapped reads number |\t")[-1]
-                if "Uniquely mapped reads % |" in line:
-                    unique_p = line.split("Uniquely mapped reads % |\t")[-1].strip("%")
-    logging.info(f"Align input\t{input_r}")
-    logging.info(f"Align unique\t{unique_r}({unique_p}%)")
-
-def BWA_log(bam):
-    """
-    Parse bam file for alignment report 
-    Input:
-    bam: bam file 
-    Output: 
-    alignment stat
-    """
-    from bam_tools import bam2bed
-    read_bed = bam2bed(bam, label = "DNA", read_seq = False)
-    read_num = len(set(read_bed["name"]))
-    logging.info(f"Align unique\t{read_num}")
+    subprocess.call(align_command, shell = True)
 
 def markdup(bam, output):
     """
-    Markdup bam file 
+    Markdup bam file (applies to bulk cell data)
     Input:
     bam: bam file 
     output: output prefix name 
     Output: 
     None
     """
-    modules = ["picard", "java"]
-    my_env = module_load(modules)
     # 
     picard="/usr/local/apps/picard/3.1.0/picard.jar"
     markdup_command = f"java -jar {picard} MarkDuplicates -I {bam} -O {output}.bam -M {output}.txt --REMOVE_DUPLICATES true"
-    subprocess.call(markdup_command, shell = True, env = my_env)
-
-def markdup_log(file):
-    """
-    Parse picard markdup output file 
-    Input: 
-    file: file to open 
-    Output:
-    pd.DataFrame of the log stats
-    """
-    log_list = list()
-    with open(file, "r") as log_open:
-        lines = log_open.readlines(); content = "".join(lines)
-        stat_block = content.split("\n\n")[1]
-        for line in stat_block.split("\n"):
-            if not line.startswith("#"):
-                log_list.append(line.split("\t"))
-    # 
-    df = pd.DataFrame(log_list[1], index = log_list[0], columns = ["stat"])
-    return df
+    subprocess.call(markdup_command, shell = True)
 
 def featurecount(bam, gtf, name, thread):
     """
@@ -178,11 +133,9 @@ def featurecount(bam, gtf, name, thread):
     Output: 
     None
     """
-    modules = ["subread"]
-    my_env = module_load(modules)
     count_command = f"featureCounts -p --countReadPairs -C -B -a {gtf} -F GTF --extraAttributes gene_name -s 0 -T {thread} {bam} -o {name}"
     print(count_command)
-    subprocess.call(count_command, shell = True, env = my_env)
+    subprocess.call(count_command, shell = True)
 
 def parse_featurecount(name):
     """
@@ -217,8 +170,6 @@ def rsem_quantify(r1, r2, ref_dir, name, thread):
     Output:
     None
     """
-    modules = ["rsem/1.3.3", "STAR", "samtools"]
-    my_env = module_load(modules)
     # module = " ".join(modules)
     # p = os.system(f"module load {module} | echo $PATH", shell = True)
     # p.communicate()
@@ -227,7 +178,7 @@ def rsem_quantify(r1, r2, ref_dir, name, thread):
     if r1.endswith(".gz"):
         rsem_command += " --star-gzipped-read-file"
     rsem_command += f" {r1} {r2} {ref_dir} {name}"
-    subprocess.call(rsem_command, shell = True, env = my_env)
+    subprocess.call(rsem_command, shell = True)
 
 def parse_rsem(name):
     """

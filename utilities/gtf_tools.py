@@ -48,7 +48,6 @@ def protein_coding(gtf, out):
                 # wrote protein coding features 
                 fw.write(str(g) + "\n")
 
-
 def parse_TSS(gtf, feature = "gene"):
     """
     Find Transcript Start Site (TSS) in GTF file

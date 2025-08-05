@@ -1,26 +1,34 @@
 #!/usr/bin/env python3
+"""
+This is a pipeline executing the following steps in hic_align.py. 
+1) trim read ; 
+2) read aligment; 
+3) markduplicate; 
+4) bam QC; 
+
+"""
 import os 
 import pandas as pd 
 import argparse 
 import sys 
 import subprocess
+from utilities.misc import ignore_warning
+import glob 
+import os 
 
-if not sys.warnoptions:
-    import warnings
-    warnings.simplefilter("ignore")
+ignore_warning()
 
 def args_parser():
     '''parser the argument from terminal command'''
-    parser = argparse.ArgumentParser(prog = "PROG", add_help = False, formatter_class = argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("-sample", "--sample_table", help = "samples in a tsv file to process")
-    parser.add_argument("-dir", "--directory", help = "directory where to find the fastq data")
-    parser.add_argument("-n", "--thread", help = "thread number (default: 4)", default = 4, type = int)
-    parser2 = argparse.ArgumentParser(prog = "PROG", add_help = True)
-    sub_parsers = parser2.add_subparsers(dest = "command", help = "mode to run")
-    proc = sub_parsers.add_parser("process", help = "process each library for alignment, markdup, and QC", parents = [parser])
-    merge = sub_parsers.add_parser("merge", help = "merge libraries belonging to the same sample", parents = [parser])
-    fm = sub_parsers.add_parser("transform", help = "generate pairs file for PET", parents = [parser])
-    fm.add_argument("-chrsize", "--chrsize", help = "sorted chrsize file")
+    parser = argparse.ArgumentParser(prog = "PROG", add_help = True, formatter_class = argparse.RawDescriptionHelpFormatter, 
+                                     usage = "")
+    parser.add_argument("sample", help = "samples in a xlsx file to process")
+    parser2 = argparse.ArgumentParser(prog = "PROG", add_help=True)
+    sub_parsers = parser2.add_subparsers(dest = "mode", help = "mode to run")
+    process = sub_parsers.add_parser("process", help = "process sample data", parents = [parser], add_help = False)
+    process.add_argument("-dir", "--directory", help = "directory where to find the fastq data")
+    process.add_argument("-n", "--thread", help = "thread number (default: 4)", default = 4, type = int)
+    summary = sub_parsers.add_parser("summary", help = "generate summary report", parents = [parser], add_help = False)
     args = parser2.parse_args()
     return args
 
@@ -28,114 +36,147 @@ def read_df(table):
     # columns: id, sample
     if table.endswith(".xlsx"): 
         sample_df = pd.read_excel(table, header = 0)
-    return sample_df 
+        return sample_df 
+    else: 
+        print("Input sample is not in xlsx format.")
+        exit(1)
 
-def process_sample(args, sample_df, dir):
-    for row in sample_df.itertuples():
-        print(f"Processing {row.id}")
-        read = os.path.join(dir, row.id)
-        # preprocessing step 
-        pre_step = f"hic_align.py pre -read {read} -n {args.thread} -o {row.id}"
-        subprocess.call(pre_step, shell = True)
-        qc_dir = "/data/jim4/Seq/primary_cell_project/fastq/QC/HiTrAC"
-        qc_read = os.path.join(qc_dir, row.id)
-        # alignment to reference genome
-        if row.ref == "human":
-            ref = "/data/jim4/Reference/human/GRCh38.p14/fasta/GRCh38.primary_assembly.genome.fa"
-        align_step = f"hic_align.py align -read {qc_read} -ref {ref} -n {args.thread} -o {row.id}"
-        subprocess.call(align_step, shell = True)
-        # markdup alignment file 
-        align_dir = "/data/jim4/Seq/primary_cell_project/alignment/HiTrAC/raw/individual"
-        align_bam = os.path.join(align_dir, row.id + ".bam")
-        mark_step = f"hic_align.py markdup -bam {align_bam} -o {row.id}"
-        subprocess.call(mark_step, shell = True)
-        # qc alignment file 
-        mark_dir = "/data/jim4/Seq/primary_cell_project/alignment/HiTrAC/markdup/individual"
-        mark_bam = os.path.join(mark_dir, row.id + ".bam")
-        qc_step = f"hic_align.py qc -bam {mark_bam} -n {args.thread} -o {row.id}"
-        subprocess.call(qc_step, shell = True)
-        # cis bam file 
-        qcdir = "/data/jim4/Seq/primary_cell_project/alignment/HiTrAC/QC/individual"
-        qc_bam = os.path.join(qcdir, row.id + ".bam")
-        cis_step = f"hic_align.py cis -bam {qc_bam} -n {args.thread} -o {row.id}"
-        subprocess.call(cis_step, shell = True)
-
-def sample_log(sample_df):
-    sample_result = list()
-    for row in sample_df.itertuples():
-        sample_stat = log_parser(row.id + ".log")
-        sample_row = list(row.id) + list(sample_stat)
-        sample_result.append(sample_row)
-    sample_result_df = pd.DataFrame(sample_result, columns = ["id", "raw", "clean", "aligned", "duplication", "aligned_QC", "cis", "shortPET", "intermediatePET", "longPET"])
-    return sample_result_df 
-
-def log_parser(log):
-    log_dir = "/data/jim4/Seq/primary_cell_project/log"
-    with open(os.path.join(log_dir, log), "r") as log_f:
-        for line in log_f.readlines():
-            line = line.strip("\n")
-            if "#" not in line:
-                if "Input" in line.split("\t")[0]:
-                    input_total = line.split("\t")[-1]
-                if "Clean" in line.split("\t")[0]:
-                    clean_total = line.split("\t")[-1]
-                if "Aligned" in line.split("\t")[0]:
-                    aligned_total = line.split("\t")[-1]
-                if "Duplication" in line.split("\t")[0]:
-                    duplicate = line.split("\t")[-1]
-                if "QC" in line.split("\t")[0]:
-                    QC = line.split("\t")[-1]
-                if "Cis" in line.split("\t")[0]:
-                    cis = line.split("\t")[-1]
-                if "short distance" in line.split("\t")[0]:
-                    short_dist = line.split("\t")[-1]
-                if "intermediate distance" in line.split("\t")[0]:
-                    inter_dist = line.split("\t")[-1]
-                if "long distance" in line.split("\t")[0]:
-                    long_dist = line.split("\t")[-1]
-    return (input_total, clean_total, aligned_total, duplicate, QC, cis, short_dist, inter_dist, long_dist)
-
-def bam_merge(args, sample_df, dir):
-    for group, group_df in sample_df.groupby("sample"):
-        group_id = group_df["id"].to_list()
-        RG_label = "\n".join([f'@RG\tID:{id}\tSM:{group}\tLB:{id}\tPL:ILLUMINA' for id in group_id])
-        command = f"printf '{RG_label}' > {group}.txt"
-        subprocess.call(command, shell = True)
-        file_combined = " ".join([os.path.join(dir, g + ".bam") for g in group_id])
-        merge_command = f'samtools merge -rh {group}.txt -@ {args.thread} -o - {file_combined} | samtools sort -@ {args.thread} - -o {group}.bam && samtools index -@ {args.thread} {group}.bam && rm {group}.txt'
-        if not os.path.exists(group + ".bam"):
-            print(merge_command)
-            subprocess.call(merge_command, shell = True)
-
-def preserve_bam_header(bam):
-    bam_handle = pysam.AlignmentFile(bam, "rb")
-    bam_header = bam_handle.header()
-    return bam_header 
+def format_excel(out, sample_report):
+    """
+    Write sample report in style
+    out: str. output excel name
+    sample_report: df. dataframe to be styled. 
+    """
+    import string
+    letters = list(string.ascii_uppercase)
+    # 
+    col_list = sample_report.columns.tolist()
+    yield_col = [col for col in sample_report.columns if col.endswith("yield")]
+    with pd.ExcelWriter(out, mode = "w") as writer:
+        sample_report.to_excel(writer, index = False, sheet_name = "Sheet1")
+        workbook = writer.book 
+        worksheet = writer.sheets["Sheet1"]
+        #int_format = workbook.add_format({"num_format": "#,##0"})
+        bg_format = workbook.add_format({"bg_color":"#fff7c7"})
+        bg_format_low = workbook.add_format({"bg_color":"#898481"})
+        #tot_col = col_list.index("total_reads")
+        #worksheet.set_column(f"{tot_col}:{tot_col}", None, int_format)
+        # add background color to yield columns 
+        for y in yield_col:
+            format_col = letters[col_list.index(y)]
+            worksheet.set_column(f"{format_col}:{format_col}", None, bg_format)
+        for row in sample_report.itertuples():
+            if row.trim_yield < 0.8:
+                worksheet.write(row.Index+1, col_list.index("trim_yield"), sample_report.iloc[row.Index, col_list.index("trim_yield")], bg_format_low)
+            if row.align_ratio < 0.8:
+                "low quality aligned"
+                worksheet.write(row.Index + 1, col_list.index("align_ratio"), sample_report.iloc[row.Index, col_list.index("align_ratio")], bg_format_low)
+            if row.dup_yield < 0.4: 
+                "high duplication"
+                worksheet.write(row.Index + 1, col_list.index("dup_yield"), sample_report.iloc[row.Index, col_list.index("dup_yield")], bg_format_low)
+            if row.cis_yield < 0.5:
+                "low cis"
+                worksheet.write(row.Index + 1, col_list.index("cis_yield"), sample_report.iloc[row.Index, col_list.index("cis_yield")], bg_format_low)
+            if row.cis_valid_yield < 0.15:
+                "low cis with long distance"
+                worksheet.write(row.Index + 1, col_list.index("cis_valid_yield"), sample_report.iloc[row.Index, col_list.index("cis_valid_yield")], bg_format_low)
+            if row.enrich < 1.25:
+                worksheet.write(row.Index + 1, col_list.index("enrich"), sample_report.iloc[row.Index, col_list.index("enrich")], bg_format_low)
 
 def main():
     args = args_parser()
-    sample_df = read_df(args.sample_table)
-    dir = args.directory
-    if args.command == "process":
-        process_sample(args, sample_df, dir)
-    if args.command == "merge":
-        bam_merge(args, sample_df, dir)
-    if args.command == "transform":
-        chrsize = args.chrsize
-        for sample, sample_df in sample_df.groupby("sample"):
-            sample_bam = os.path.join(dir, sample + ".bam")
-            if not os.path.exists(sample + ".pairs"):
-                pair_generator = f"hic_format.py pairs {sample_bam} -o {sample} -chrsize {chrsize} -n {args.thread}"
-                subprocess.call(pair_generator, shell = True)
-            if not os.path.exists(sample + ".cool"):
-                cool_generator = f"hic_format.py cool {sample}.pairs -o {sample} -chrsize {chrsize} -n {args.thread}"
-                subprocess.call(cool_generator, shell = True)
-                blacklist= "/data/jim4/data/blacklist/ENCFF356LFX.bed"
-                dchic_command = f"hic_format.py dchic {sample}.mcool -o {sample} -chrsize {chrsize} -n {args.thread} -blacklist {blacklist} -r 25000 50000 100000 250000 500000"
-                subprocess.call(dchic_command, shell = True)
-            if not os.path.exists(sample + ".hic"):
-                hic_generator = f"hic_format.py hic {sample}.pairs -o {sample} -chrsize {chrsize} -n {args.thread}"
-                subprocess.call(hic_generator, shell = True)
+    sample_df = read_df(args.sample)
+    # process samples 
+    if args.mode == "summary": 
+        import json
+        log_dir = "/data/jim4/Seq/primary_cell_project/alignment/HiTrAC/log"
+        jlist = list()
+        for row in sample_df.itertuples():
+            logf = os.path.join(log_dir, f"{row.id}.log")
+            with open(logf, "r") as logj:
+                jdict = json.load(logj)
+                jdf = pd.DataFrame.from_dict(jdict, orient = "index")
+                jlist.append(jdf)
+        sample_report = pd.concat(jlist, axis = 1).transpose()
+        sample_report = pd.merge(sample_df, sample_report, left_on = "id", right_on = "ID").drop("ID", axis = 1)
+        sample_report["final_yield(%)"] = (sample_report["cis"]-sample_report['short_distance'])/sample_report["total_reads"]*100
+        out = args.sample.replace(".xlsx", "_report.xlsx")
+        format_excel(out, sample_report)
+    if args.mode == "process":
+        dir = args.directory
+        n = args.thread
+        for row in sample_df.itertuples():
+            print(f"Processing {row.id}")
+            read = os.path.join(dir, row.id)
+            # preprocessing step 
+            pre_step = f"hic_align.py pre -read {read} -n {n}"
+            # subprocess.call(pre_step, shell = True)
+            qc_dir = "/data/jim4/Seq/primary_cell_project/fastq/QC/HiTrAC"
+            qc_read = os.path.join(qc_dir, row.id)
+            # alignment to reference genome
+            # if row.ref == "human":
+            #     ref = "/data/jim4/Reference/human/GRCh38.p14/fasta/GRCh38.primary_assembly.genome.fa"
+            align_step = f"hic_align.py align -read {qc_read} -n {n}"
+            # subprocess.call(align_step, shell = True)
+            # markdup alignment file 
+            align_dir = "/data/jim4/Seq/primary_cell_project/alignment/HiTrAC/raw/individual"
+            align_bam = os.path.join(align_dir, row.id + ".bam")
+            mark_step = f"hic_align.py markdup -bam {align_bam}"
+            # subprocess.call(mark_step, shell = True)
+            # qc alignment file 
+            mark_dir = "/data/jim4/Seq/primary_cell_project/alignment/HiTrAC/markdup/individual"
+            mark_bam = os.path.join(mark_dir, row.id + ".bam")
+            qc_step = f"hic_align.py qc -bam {mark_bam} -n {n}"
+            # subprocess.call(qc_step, shell = True)
+            qc_dir = "/data/jim4/Seq/primary_cell_project/alignment/HiTrAC/QC/individual"
+            qc_bam = os.path.join(qc_dir, row.id + '.bam')
+            name_sort = f"hic_align.py nsort -bam {qc_bam} -n {n}"
+            # subprocess.call(name_sort, shell = True)
+            log_command = f"hic_align.py log -id {row.id}"
+            # subprocess.call(log_command, shell = True)
+            if not os.path.exists(qc_read + "_R1.fastq.gz") and not os.path.exists(qc_read + "_R2.fastq.gz"):
+                print(pre_step)
+                subprocess.call(pre_step, shell = True)
+            if not os.path.exists(align_bam):
+                print(align_step)
+                subprocess.call(align_step, shell = True)
+            if not os.path.exists(mark_bam):
+                print(mark_step)
+                subprocess.call(mark_step, shell = True)
+            if not os.path.exists(qc_bam):
+                print(qc_step)
+                subprocess.call(qc_step, shell = True)
+            subprocess.call(name_sort, shell = True)
+            subprocess.call(log_command, shell = True)
+            # if 
+            #if not os.path.exists()
+            #consecutive_steps = " && ".join([pre_step, align_step, mark_step, qc_step, name_sort, log_command])
+            #subprocess.call(consecutive_steps, shell = True)
+        # # cis bam file 
+        # qcdir = "/data/jim4/Seq/primary_cell_project/alignment/HiTrAC/QC/individual"
+        # qc_bam = os.path.join(qcdir, row.id + ".bam")
+        # cis_step = f"hic_align.py cis -bam {qc_bam} -n {args.thread} -o {row.id}"
+        # subprocess.call(cis_step, shell = True)
+    # if args.command == "process":
+    #     process_sample(args, sample_df, dir)
+    # if args.command == "merge":
+    #     bam_merge(args, sample_df, dir)
+    # if args.command == "transform":
+    #     chrsize = args.chrsize
+    #     for sample, sample_df in sample_df.groupby("sample"):
+    #         sample_bam = os.path.join(dir, sample + ".bam")
+    #         if not os.path.exists(sample + ".pairs"):
+    #             pair_generator = f"hic_format.py pairs {sample_bam} -o {sample} -chrsize {chrsize} -n {args.thread}"
+    #             subprocess.call(pair_generator, shell = True)
+    #         if not os.path.exists(sample + ".cool"):
+    #             cool_generator = f"hic_format.py cool {sample}.pairs -o {sample} -chrsize {chrsize} -n {args.thread}"
+    #             subprocess.call(cool_generator, shell = True)
+    #             blacklist= "/data/jim4/data/blacklist/ENCFF356LFX.bed"
+    #             dchic_command = f"hic_format.py dchic {sample}.mcool -o {sample} -chrsize {chrsize} -n {args.thread} -blacklist {blacklist} -r 25000 50000 100000 250000 500000"
+    #             subprocess.call(dchic_command, shell = True)
+    #         if not os.path.exists(sample + ".hic"):
+    #             hic_generator = f"hic_format.py hic {sample}.pairs -o {sample} -chrsize {chrsize} -n {args.thread}"
+    #             subprocess.call(hic_generator, shell = True)
 
 if __name__ == "__main__":
     main()

@@ -124,6 +124,7 @@ To compare among samples, consistent peaks based on all input peaks are generate
      - the previously reported loops for GM12878 is not high-quality and complete, very few SIL reported, and the anchor/tether-anchor distribution is also different; 
      - I need to get the cool data for GM12878, and call loops using my method; 
      - TBC ... 
+   - GM12878: Lymphoblastoid (transformed B cells)
    - celltype specific SIL should be comparing to SE of the same celltype; 
      - see `script/SIL_SE_compare.py`; 
      - 

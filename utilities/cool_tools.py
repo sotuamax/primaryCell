@@ -2,6 +2,19 @@ import cooler
 import numpy as np 
 import pandas as pd 
 
+def cool_matrix(cool, resolution, region):
+    """
+    region: tuple (three-element w/ chrom, start, end); 
+    resolution: int; 
+    cool: str for cool input file; 
+    """
+    if cool.endswith(".mcool") and resolution != None:
+        cool_handle = cooler.Cooler(f"{cool}::resolutions/{resolution}")
+    else:
+        cool_handle = cooler.Cooler(cool)
+    clr_matrix = cool_handle.matrix(balance = False).fetch(region, region)
+    return clr_matrix 
+
 def global_exp(clr_matrix:np.ndarray):
     return get_diag(clr_matrix, i = 0).mean()
 

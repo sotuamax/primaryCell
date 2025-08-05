@@ -80,8 +80,6 @@ def rmblacklist(peak_df, black_df):
     Returns: 
     df: peaks that not overlapping with blacklist region
     """
-    import pandas as pd 
-    import bioframe as bf
     peak_overlap_black = bf.overlap(peak_df, black_df, how = "left")
     peak_no_black = peak_overlap_black[peak_overlap_black.isna().any(axis = 1)].drop(["chrom_", "start_", "end_"], axis = 1)
     return peak_no_black

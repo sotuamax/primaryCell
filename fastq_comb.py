@@ -13,7 +13,7 @@ import os
 def args_parser():
     '''parser the argument from terminal command'''
     parser=argparse.ArgumentParser(prog = "PROG", formatter_class = argparse.RawDescriptionHelpFormatter, description="")
-    parser.add_argument("-dir", "--directory", nargs = "+", help = "master directory sequencing data")
+    parser.add_argument("-dir", "--directory", nargs = "+", help = "master directories for  sequencing data")
     parser.add_argument("-dest", "--destination", default = ".", help = "destination to store the merged files")
     args=parser.parse_args()
     return args
@@ -22,10 +22,13 @@ def main():
     args = args_parser()
     dirs = args.directory
     dest = args.destination
+    file_list = list()
     for dir in dirs:
         file_folder = [(dirpath, f) for dirpath, dirname, filename in os.walk(dir) for f in filename]
         file_folder_df = pd.DataFrame(file_folder, columns = ["folder", "file"])
+        file_list.append(file_folder_df)
     # extract GC and read (R1/R2) label
+    file_folder_df = pd.concat(file_list, axis = 0)
     file_folder_df["GC"] = file_folder_df["file"].str.split("_", expand = True)[0]
     file_folder_df["R"] = file_folder_df["file"].str.split("_", expand = True)[3]
     #

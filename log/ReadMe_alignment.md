@@ -6,7 +6,7 @@
   - [Seq alignment](#seq-alignment)
   - [Markdup](#markdup)
   - [Quality control (QC)](#quality-control-qc)
-  - [Merge replicates](#merge-replicates)
+  - [Merge replicates (no longer required - June 05, 2025)](#merge-replicates-no-longer-required---june-05-2025)
   - [Evaluation](#evaluation)
   - [Downstream processed files](#downstream-processed-files)
   - [Peaks](#peaks)
@@ -50,7 +50,7 @@
     * MAPQ > 30; **("NH", 1)** in read tags, and on chromosome region for RNA-seq (downstream of STAR alignment); 
     * For transcriptome alignment, its BAM file was filtered based on genome alignment QC selection.
 
-#### Merge replicates 
+#### Merge replicates (no longer required - June 05, 2025)
 - samples with multiple replicates, after QC the alignment files are merged (specifically for DNase-seq and Hi-TrAC):
     * see "name_sorted" (temporary): for read sorted by _readname_;
     * see "clean" for paired-read pass QC and sorted by _readname_;
@@ -63,7 +63,6 @@
 
 - For record, RG (readGroup) is added when merging BAM files;
   `samtools merge -r -o merged.bam sampl1.bam sample2.bam` 
-    
 
 #### Evaluation 
 - "eval" folder contains metrics for library quality evaluation. 

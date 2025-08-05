@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 """
-Transform BAM input file into pairs/cool/hic
+Transform BAM input file into pairs/cool/hic.
 
 Input: 
     required: 
-    - bam: bam file (name sorted)
-    optional:
+    - bam: bam file (recommend in name sorted)
     - ouput: output name 
+    optional:
     - assembly: genome assembly name 
     - threads: threads to use 
     - chrsize: chromosome size file 
 
+===============
 Example: 
-============ 
-
+source myoncda 
+mamba activate bio 
 ml pairtools juicer
 hic_format.py -n 12 -o <sample> <sample>.bam
 
@@ -30,10 +31,10 @@ from utilities.misc import timeit
 
 def args_parser():
     '''parser the argument from terminal command'''
-    parser = argparse.ArgumentParser(prog = "PROG", formatter_class = argparse.RawDescriptionHelpFormatter, add_help = False)
-    parser.add_argument("bam", help = "input bam file (either coordinate or name sorted)")
+    parser = argparse.ArgumentParser(prog = "PROG", formatter_class = argparse.RawDescriptionHelpFormatter, add_help = True, usage="hic_format.py -o <out> input.bam ")
+    parser.add_argument("bam", help = "input bam file (either coordinate or name sorted, provide name sorted file to save time)")
     parser.add_argument("-o", "--output", required = True, help = "output file name (prefix)")
-    parser.add_argument("-n", "--thread", default = 1, type = int, help = "thread to process bam")
+    parser.add_argument("-n", "--thread", default = 2, type = int, help = "thread to process bam")
     parser.add_argument("-chrsize", "--chrsize", required = False, default = "/data/jim4/Reference/human/GRCh38.p14/GRCh38_chrsize.bed", help = "file for ordered chromosome and size")
     parser.add_argument("-assembly", "--assembly", default = "hg38", help = "genome assembly name")
     args = parser.parse_args()
@@ -86,7 +87,7 @@ def main():
         subprocess.call(f"cooler cload pairs --assembly {assembly} {chrsize}:1000 {out}.pairs.gz {out}.cool -c1 2 -p1 3 -c2 4 -p2 5", shell = True)
     if not os.path.exists(out + ".mcool"):
         print("Generate mcool at 1,5,10,25,50,100 kb resolutions ...")
-        mcool_command = f"cooler zoomify {out}.cool -n {n} -r 1000,5000,10000,25000,50000,100000 -o {out}.mcool"
+        mcool_command = f"cooler zoomify {out}.cool -n {n} -r 1000,5000,10000,25000,40000,50000,100000 -o {out}.mcool"
         print(mcool_command)
         print(f"Run cooler w/ {n} threads ...")
         subprocess.call(mcool_command, shell = True)
@@ -95,7 +96,7 @@ def main():
         # although cool no need to sort pairs, juicer must sort pairs by chromosome 
         print("Load pairs to generate HiC at 1,5,10,25,50,100 kb resolutions ... ")
         juicertools="/usr/local/apps/juicer/juicer-1.6/scripts/juicer_tools.jar"
-        juicer_command = f"java -Xmx48g -jar {juicertools} pre -r 1000,5000,10000,25000,50000,100000 -k KR {out}.pairs.gz {out}.hic --threads {n} {assembly}"
+        juicer_command = f"java -Xmx48g -jar {juicertools} pre -r 1000,5000,10000,25000,40000,50000,100000 -k KR {out}.pairs.gz {out}.hic --threads {n} {assembly}"
         print(juicer_command)
         print(f"Run juicer w/ {n} threads ...")
         subprocess.call(juicer_command, shell = True)

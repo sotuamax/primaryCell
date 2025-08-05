@@ -130,8 +130,23 @@
 - to compare the dataset quality, I downloaded the variants used [here](https://www.sciencedirect.com/science/article/pii/S0092867413012270?via%3Dihub), what I found is: 
 	-  GWAS catalog contains most of the variants used in that study, and the trait of specific variant in association is also in agreement. 
 - about SNP prune: 
-  - causal SNPs related to the specific trait is unknown, and it can any SNPs with linkage disequilibruim of the SNP 
-
+  - causal SNPs related to the specific trait is unknown, and it can be any variations with linkage disequilibruim of the SNP; 
+- versions: 
+  - v1.0 is the standard GWAS catalog info;
+  - v1.0.2 with added ontology annotations, GWAS Catalog study accession numbers and genotype tech (preferred with ontology annotation);
+  - v1.0.2.1 with ontology annotations, GWAS Catalog study accession numbers and genotype tech, cohort IDs, and full summary statistics;
+  - use v1.0.2 as reference (optimal information); 
+- filtering: 
+  - I cleaned up v1.0.2 raw tsv; 
+  - filter replicated variant for the same trait (see "clean"); 
+  - when the same variant identified multiple times (from multiple studies), the variant with the most significant p-value then retained (see "clean.remove_replicates"); 
+  - see "gwas.py"; 
+- Test on enrichment analysis wo/ prune SNPs: 
+  - For SIL of nCAEC, SNPs of phosphatidylinositol (PI) enriched; 
+  - checking on the SNPs for PI measurement, I found that cluster of SNPs overlapping with SIL contribute to the enrichment (e.g., chr11:62 Mb, chr19: 54 Mb); 
+- about LDSC: 
+  - format explained: https://github.com/bulik/ldsc/wiki/LD-File-Formats
+  - 
 
 #### Fine-mapping 
 - See [here](https://www.finucanelab.org/data); 

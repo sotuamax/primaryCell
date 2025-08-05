@@ -4,7 +4,47 @@ import bioframe as bf
 import os 
 
 
+def tether_bed(anchor_df, distance):
+    """
+    Tether anchors when the distance between is less than a cutoff
+    Inputs: 
+    anchor_df: pandas df in bed format (minimum: chrom, start, end);
+    distance: distance cutoff use to tether anchors;
+    Return: 
+    df: tethered anchor in bed format (labeled by: its length, and number of anchors contributed to the tethering)
+    """
+    anchor_stitch_df = bf.cluster(anchor_df, min_dist = distance)
+    #anchor_stitch_df["length"] = anchor_stitch_df["cluster_end"] - anchor_stitch_df["cluster_start"]
+    anchor_stitch_df["count"] = anchor_stitch_df.groupby(["chrom", "cluster_start", "cluster_end"])["start"].transform("nunique")
+    # select columns of interest
+    anchor_stitch_df = anchor_stitch_df[["chrom", "cluster_start", "cluster_end", "count"]].rename(columns = {"cluster_start":"start", "cluster_end":"end"})
+    # remove duplicates 
+    anchor_return = anchor_stitch_df.drop_duplicates(keep = "first")
+    return anchor_return
+
+def cis_trans_bed(bed):
+    """
+    parse bedpe file for cis/trans reads stat
+    """
+    for chunk in pd.read_table(bed, header = None, chunksize=100):
+        df_col = bedpe_colname(chunk)
+        break 
+    cis_pair = 0
+    trans_pair = 0
+    close_pair = 0
+    bed_df_chunk = pd.read_table(bed, header = None, names = df_col, chunksize=500000)
+    for chunk_df in bed_df_chunk:
+        cis_pair += len(chunk_df.query("chrom1 == chrom2"))
+        trans_pair += len(chunk_df.query("chrom1 != chrom2"))
+        close_pair += len(chunk_df.query("chrom1 == chrom2 and start2 - start1 < 1000"))
+    valid_pair_ratio = (cis_pair - close_pair)/(cis_pair + trans_pair)
+    log_dict = {"cis":int(cis_pair), "trans":int(trans_pair), "cis_yield":int(cis_pair)/(cis_pair + trans_pair), "short_distance":int(close_pair), "cis_valid_yield":float(valid_pair_ratio)}
+    return log_dict 
+
 def bed2fasta(bed, ref, out = None):
+    """
+    Reformat bed into fasta file
+    """
     from Bio import SeqIO 
     ref = SeqIO.parse(ref, "fasta")
     ref_dict = SeqIO.to_dict(ref)
@@ -34,7 +74,7 @@ def bedpe_retrieve(region, loop_df):
     selected loop_df that overlaps the given region. 
     """
     # check if loop_df index duplicated or not 
-    if len(set(loop_df.index)) == len(loop_df):
+    if len(set(loop_df.index)) != len(loop_df):
         loop_df.index = range(len(loop_df))
     # get loop (left, chrom1, start1, end1) overlap region
     left_loop = bf.select(loop_df.rename(columns = {"chrom1":"chrom", "start1":"start", "end1":"end"}), region)
@@ -45,19 +85,18 @@ def bedpe_retrieve(region, loop_df):
 
 def bedpe_colname(bedpe_df):
     """
-    Based on the shape of bedpe, to name column names for bedpe file.
+    Based on the shape of bedpe, return its column name 
     """
     if len(bedpe_df.columns) == 6:
-        bedpe_df.columns = ["chrom1", 'start1', "end1", "chrom2", "start2", "end2"]
+        return ["chrom1", 'start1', "end1", "chrom2", "start2", "end2"]
     if len(bedpe_df.columns) == 7:
-        bedpe_df.columns = ["chrom1", 'start1', "end1", "chrom2", "start2", "end2", "name"]
+        return ["chrom1", 'start1', "end1", "chrom2", "start2", "end2", "name"]
     if len(bedpe_df.columns) == 8:
-        bedpe_df.columns = ["chrom1", 'start1', "end1", "chrom2", "start2", "end2", "name", "score"]
+        return ["chrom1", 'start1', "end1", "chrom2", "start2", "end2", "name", "score"]
     if len(bedpe_df.columns) == 9:
-        bedpe_df.columns = ["chrom1", 'start1', "end1", "chrom2", "start2", "end2", 'name', "strand1", "strand2"]
+        return ["chrom1", 'start1', "end1", "chrom2", "start2", "end2", 'name', "strand1", "strand2"]
     if len(bedpe_df.columns) == 10:
-        bedpe_df.columns = ["chrom1", 'start1', "end1", "chrom2", "start2", "end2", 'name', "score", "strand1", "strand2"]
-    return bedpe_df
+        return ["chrom1", 'start1', "end1", "chrom2", "start2", "end2", 'name', "score", "strand1", "strand2"]
 
 def is_bedpe(bedpe_df):
     """
@@ -72,6 +111,9 @@ def is_bedpe(bedpe_df):
     return True
 
 def bed_overlap(bed1, bed2):
+    """
+    Find overlaps between two bed files 
+    """
     bed_df1 = bf.read_table(bed1, schema = "bed3")
     bed_df2 = bf.read_table(bed2, schema = "bed3")
     print(f"Input bed {len(bed_df1)} vs. {len(bed_df2)}")
