@@ -33,10 +33,8 @@ scripts developed for the primary cell project which includes Hi-TrAC, DNase, RN
   - [x] gene filtering on expression data (featureCount and TPM), note that TPM is preferred in between sample comparisons; 
   - [x] loop frequency is correlated with gene expression (this is seen in high interaction loci, and its overlapping genes are constitutively highly expressed.)
   - [?] adapt ABC model for the analysis of loop contact frequencies and expression variation; 
-  - [ ] start from differentially expressed genes, and see how the loop interactions vary; 
   - [ ] concerted analysis on variable DHS/loops and enriched motif and TF; 
   - [ ] examine the quality of loop annotation; 
-  - [ ] add H3K27ac to loop understanding; 
   - [ ] TAD & its relationship with AG loops; 
   - [ ] classify genes into GG-prone, or IG-prone; 
   - [ ] For genes overweighted by GG-loops, check the Gene-gene expression relations; 
@@ -233,10 +231,22 @@ To compare among samples, consistent peaks based on all input peaks are generate
 - 
 
 #### Insulation
-- Consider insulation as the way to segment genome into domains: between domains, the insulation score is greater; 
-- Method: slide a diamond-shape window along the genome (one corner on the diagonal of the matrix), and score for the sum of contacts within the window for each position. At certain location, the score is significantly lower than its surrounding region (reflecting lowered contact frequencies between upstream and downstream loci), this position is referred to as boundary position. 
-- see domain paper [here](https://www.nature.com/articles/nature11082);
-- 
+- insulation is used to isolate genome into segments between higher insulator occurs; 
+- Consider insulation as the way to segment genome into domains; 
+- Method: slide a diamond-shape window along the genome (one corner on the diagonal of the matrix), and score for the sum of contacts within the window for each position. At certain location, the score is significantly lower than its surrounding region (reflecting lowered contact frequencies between upstream and downstream loci), this position is referred to as boundary position; 
+- Papers:
+  - [Dixon, Nature, 2012](https://www.nature.com/articles/nature11082); see Fig2 b&c;
+  - [Schmitt, Cell reports, 2016](https://doi.org/10.1016/j.celrep.2016.10.061); GM12878 TAD reported; 
+  - [Crane, Nature, 2015](https://www.nature.com/articles/nature14450); see SFig 2&3 and Methods "TAD calling"; 
+- script `insulation.py`; 
+- run `insulation.py input.cool -r 40000 -w 5 -dv 2 -vs 5 -o out`;
+  - r resolution; 
+  - w window size for score calculation; 
+  - dv derivative calculation use side bins;
+  - vs valley screen on side bins for local minima; 
+  - fd foldchange of surrounding region maxima versus the local minima; 
+- To run multiple cores `mpiexec -n 4 insulation.py input.cool -r 40000 -w 5 -dv 2 -vs 5 -o out`;
+
 
 #### DHS 
 - This folder is to store all final processed data for DHS; 
