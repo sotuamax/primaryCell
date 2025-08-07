@@ -147,10 +147,11 @@ def main():
             print("Process window: ", f"{win}x{win}")
             print("Collecting all insulation score ...")
             pixel_all_df = pd.concat(pixel_all, axis = 0)
-            pixel_all_df = pixel_all_df[pixel_all_df[f"size_{win}"] > win].copy()
+            # pixel_all_df = pixel_all_df[pixel_all_df[f"size_{win}"] > win].copy()
             c_new_list = list()
             for row in ref_arm.itertuples():
                 c_df = bf.select(pixel_all_df, (row.chrom, row.start, row.end))
+                # derivative must calculated using its coordinate surrounding region (no filtering before derivative)
                 c_df[f"Df_{win}"] = derivative(np.array(c_df[f"score_{win}"]), args.derivative)
                 c_new_list.append(c_df)
             c_new = pd.concat(c_new_list, axis = 0)
@@ -164,7 +165,7 @@ def main():
             #c_new2_df.to_csv(f"{out}_{win}.tmp", sep = "\t", header = True, index = False)
             #exit(0)
             # iterative update on maxima value surrounding minima valley 
-            c_validate = c_new2_df[c_new2_df[f"valley_{win}"] == 1].copy()
+            c_validate = c_new2_df[c_new2_df[f"valley_{win}"] == 1]
             while len(c_validate[(c_validate[f"upfc_{win}"] < fc) & (c_validate[f"downfc_{win}"] < fc)]) > 0:
                 print("Iteration run ...")
                 c_new2_df[f"valley_{win}"] = np.where((c_new2_df[f"upfc_{win}"] < fc) & (c_new2_df[f"downfc_{win}"] < fc), 0 , c_new2_df[f"valley_{win}"])
@@ -176,6 +177,7 @@ def main():
                 c_new2_df = pd.concat(c_list, axis = 0)
                 c_new2_df[f"upfc_{win}"] = c_new2_df[f"upmax_{win}"]/c_new2_df[f"score_{win}"]; c_new2_df[f"downfc_{win}"] = c_new2_df[f"downmax_{win}"]/c_new2_df[f"score_{win}"]
                 c_validate = c_new2_df[c_new2_df[f"valley_{win}"] == 1]
+            c_new2_df = c_new2_df[c_new2_df[f"size_{win}"] > win]
             c_new2_df.to_csv(f"{out}_{win}.txt", sep = "\t", header = True, index = False)
     if rank == 0:
         win_file = list()
@@ -200,6 +202,7 @@ def main():
         # print(select_win)
         select_win["name"] = range(len(select_win)); select_win["name"] = "b" + select_win["name"].astype(str)
         select_win[["chrom", "start", "end", "name", "fc", f"strand_{win}"]].to_csv(f"{out}.bed", sep = "\t", header = False, index = False)
+        select_win[["chrom", "start", "end", "fc"]].to_csv(f"{out}.bedGraph", sep = "\t", header = False, index = False)
     exit(0)
         
 if __name__ == "__main__":
