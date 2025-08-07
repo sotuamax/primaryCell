@@ -29,6 +29,7 @@ def args_parser():
     parser.add_argument("-scale", choices = ["mm", "bg"], required = False, help = "methods used to scale score ")
     parser.add_argument("-flank", "--flank", default = 1000, type = int, help = "flanking side size centered at bed region pospoint (default: 1000)")
     #parser.add_argument("-filter", "--filter", action = "store_true", help = "when assigned, filter bed input for chromosome")
+    parser.add_argument('-blacklist', "--blacklist", required = False, help = "blacklist region used to filtering on bed file")
     parser.add_argument("-step", "--step", default = 50, type = int, help = "sample step size within the 2xflanking region")
     parser.add_argument("-min", "--min_coverage", default = 0, type = int, help = "minimum read for a region to be included in the average caculation")
     parser.add_argument("-plot", "--plot", action = "store_true", help = "when assigned, plot the screened region")
@@ -74,6 +75,11 @@ def main():
     refseq = bf.assembly_info("hg38")
     standard_seq = refseq.seqinfo["name"].tolist()
     bed_df = bed_df[(bed_df["chrom"].isin(standard_seq)) & (bed_df["chrom"] != "chrM") & (bed_df["chrom"] != "chrY")].copy()
+    if args.blacklist is not None:
+        print("Filter bed based on blacklist ...")
+        blacklist_df = bf.read_table(args.blacklist, schema = "bed3")
+        from utilities.peak_tools import rmblacklist
+        bed_df = rmblacklist(bed_df, blacklist_df)
     bed_df.to_csv(bed.replace(".bed", ".tmp.bed"), sep = "\t", header = False, index = False)
     import pyBigWig
     score_handle = pyBigWig.open(bw)
