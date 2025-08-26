@@ -13,7 +13,7 @@ Input:
 
 ===============
 Example: 
-source myoncda 
+source myconda 
 mamba activate bio 
 ml pairtools juicer
 hic_format.py -n 12 -o <sample> <sample>.bam
@@ -55,8 +55,8 @@ def main():
     if b_sort == "coordinate":
         print("Sort BAM by name ...")
         # when bam is not sorted, sort it and store in default directory 
-        sort_dir = "/data/jim4/Seq/primary_cell_project/alignment/HiTrAC/sortn"
-        new_bam = os.path.join(sort_dir, os.path.basename(bam))
+        #sort_dir = "/data/jim4/Seq/primary_cell_project/alignment/HiTrAC/sortn"
+        new_bam = bam.replace(".bam", ".n.bam")
         command = f"samtools sort -@ {n} -n -o {new_bam} {bam}"
         print(command)
         subprocess.call(command, shell=True)
@@ -87,7 +87,7 @@ def main():
         subprocess.call(f"cooler cload pairs --assembly {assembly} {chrsize}:1000 {out}.pairs.gz {out}.cool -c1 2 -p1 3 -c2 4 -p2 5", shell = True)
     if not os.path.exists(out + ".mcool"):
         print("Generate mcool at 1,5,10,25,50,100 kb resolutions ...")
-        mcool_command = f"cooler zoomify {out}.cool -n {n} -r 1000,5000,10000,25000,40000,50000,100000 -o {out}.mcool"
+        mcool_command = f"cooler zoomify {out}.cool -n {n} -r 1000,5000,10000,25000,40000,50000 -o {out}.mcool"
         print(mcool_command)
         print(f"Run cooler w/ {n} threads ...")
         subprocess.call(mcool_command, shell = True)
@@ -96,7 +96,7 @@ def main():
         # although cool no need to sort pairs, juicer must sort pairs by chromosome 
         print("Load pairs to generate HiC at 1,5,10,25,50,100 kb resolutions ... ")
         juicertools="/usr/local/apps/juicer/juicer-1.6/scripts/juicer_tools.jar"
-        juicer_command = f"java -Xmx48g -jar {juicertools} pre -r 1000,5000,10000,25000,40000,50000,100000 -k KR {out}.pairs.gz {out}.hic --threads {n} {assembly}"
+        juicer_command = f"java -Xmx48g -jar {juicertools} pre -r 1000,5000,10000,25000,40000,50000 -k KR {out}.pairs.gz {out}.hic --threads {n} {assembly}"
         print(juicer_command)
         print(f"Run juicer w/ {n} threads ...")
         subprocess.call(juicer_command, shell = True)
