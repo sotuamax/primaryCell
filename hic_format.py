@@ -76,7 +76,7 @@ def main():
             print("Load pairs to generate cool at 1k ...")
             # https://cooler.readthedocs.io/en/latest/cli.html#cooler-cload-pairs
             # pairs do NOT to be sorted. Accept compressed file. 
-            cool_command = f"cooler cload pairs --assembly {assembly} {chrsize}:1000 {out}.pairs.gz {out}.cool -c1 2 -p1 3 -c2 4 -p2 5"
+            cool_command = f"cooler cload pairs --assembly {assembly} {chrsize}:1000 {input_file} {out}.cool -c1 2 -p1 3 -c2 4 -p2 5"
             print(cool_command)
             subprocess.call(cool_command, shell = True)
         if not os.path.exists(out + ".mcool"):
@@ -86,14 +86,17 @@ def main():
             print(f"Run cooler w/ {n} threads ...")
             subprocess.call(mcool_command, shell = True)
     # generate hic
-    if not os.path.exists(out + ".hic"):
-        # although cool no need to sort pairs, juicer must sort pairs by chromosome 
-        print("Load pairs to generate HiC at 1,5,10,25,50,100 kb resolutions ... ")
-        juicertools="/usr/local/apps/juicer/juicer-1.6/scripts/juicer_tools.jar"
-        juicer_command = f"java -Xmx48g -jar {juicertools} pre -r 1000,5000,10000,25000,40000,50000 -k KR {out}.pairs.gz {out}.hic --threads {n} {assembly}"
-        print(juicer_command)
-        print(f"Run juicer w/ {n} threads ...")
-        subprocess.call(juicer_command, shell = True)
+    if args.output_format == "hic":
+        if not input_file.endswith(".pairs.gz"):
+            raise ValueError("Input file is not in pairs format!")
+        if not os.path.exists(out + ".hic"):
+            # although cool no need to sort pairs, juicer must sort pairs by chromosome 
+            print("Load pairs to generate HiC at 1,5,10,25,50,100 kb resolutions ... ")
+            juicertools="/usr/local/apps/juicer/juicer-1.6/scripts/juicer_tools.jar"
+            juicer_command = f"java -Xmx48g -jar {juicertools} pre -r 1000,5000,10000,25000,40000,50000 -k KR {input_file} {out}.hic --threads {n} {assembly}"
+            print(juicer_command)
+            print(f"Run juicer w/ {n} threads ...")
+            subprocess.call(juicer_command, shell = True)
     print(timeit(start))
 
 if __name__ == "__main__":
