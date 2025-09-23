@@ -25,7 +25,7 @@ def args_parser():
     run.add_argument("sample", help = "samples to process in a excel file")
     run.add_argument("-dir", "--directory", help = "directory where to find the fastq data")
     run.add_argument("-outdir", "--outdir", help = "directory where to write output")
-    run.add_argument("-primer")
+    # run.add_argument("-primer")
     run.add_argument("-gRNA", "--gRNA", required = False, help = "gRNA table")
     run.add_argument("-n", "--threads", default = 8, type = int, help = "threads for alignment process")
     # 
@@ -121,7 +121,7 @@ def run_process(args, sample_df, current_dir):
         # create the directory of experiment as container of sample's results 
         sample = row.sample
         GFP_sample = sample + "GFP"
-        ChiC_sample = sample + "0"
+        ChiC_sample = sample
         primer = row.primer
         frame = row.frame
         ref = row.reference 

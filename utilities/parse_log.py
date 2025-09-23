@@ -124,6 +124,15 @@ def markdup_log_parser(file):
     df = pd.DataFrame(log_list[1], index = log_list[0], columns = ["stat"])
     return df
 
+def flagstat_tsv_parse(f):
+    df = pd.read_table(f, sep = "\t", header = None, names = ["pass", "fail", "category"])
+    total_mapped = df.query("category == 'primary mapped'")["pass"].values[0]
+    # r1 = df.query("category == 'read1'")["pass"].values[0]
+    # r2 = df.query("category == 'read2'")["pass"].values[0]
+    trans = df.query("category == 'with mate mapped to a different chr'")["pass"].values[0]
+    cis = (total_mapped-trans)//2*0.95
+    return cis 
+
 def flagstat_parser(log):
     """
     parse samtools flagstat output (PE alignment)

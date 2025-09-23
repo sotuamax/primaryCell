@@ -1,6 +1,20 @@
 import bioframe as bf 
 import pandas as pd 
 import numpy as np 
+import subprocess
+
+def peakcall(file):
+    """
+    default genome: hs (hg38)
+    """
+    if file.endswith(".bam"):
+        output_name = file.split(".bam")[0]
+        command = f"macs3 callpeak -q 0.01 --keep-dup all -g hs -t {file} -f BAM --nomodel --extsize 200 --shift -100 -n {output_name}"
+    if file.enswith(".bed"):
+        output_name = file.split(".bed")[0]
+        command = f"macs3 callpeak -q 0.01 --keep-dup all -g hs -t {file} -f BED --nomodel --extsize 200 --shift -100 -n {output_name}"
+    subprocess.call(command, shell = True)
+
 
 def peak_overlap_label(peak, anno):
     """
@@ -81,7 +95,8 @@ def rmblacklist(peak_df, black_df):
     df: peaks that not overlapping with blacklist region
     """
     peak_overlap_black = bf.overlap(peak_df, black_df, how = "left")
-    peak_no_black = peak_overlap_black[peak_overlap_black.isna().any(axis = 1)].drop(["chrom_", "start_", "end_"], axis = 1)
+    col2del = [c for c in peak_overlap_black.columns if c.endswith("_")]
+    peak_no_black = peak_overlap_black[peak_overlap_black.isna().any(axis = 1)].drop(col2del, axis = 1)
     return peak_no_black
 
 def peak2saf(narrowPeak, rename = True):

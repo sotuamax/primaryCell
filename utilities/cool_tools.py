@@ -2,6 +2,20 @@ import cooler
 import numpy as np 
 import pandas as pd 
 
+
+def total_counts(cool, resolution):
+    """
+    Count total number of reads in cool file. 
+    """
+    if cool.endswith(".mcool") and resolution != None:
+        cool_handle = cooler.Cooler(f"{cool}::resolutions/{resolution}")
+    else:
+        cool_handle = cooler.Cooler(cool)
+    total_reads = 0
+    for b in cool_handle.matrix(balance = False, sparse = True):
+        total_reads += b.data.sum()
+    return total_reads 
+
 def cool_matrix(cool, resolution, region):
     """
     region: tuple (three-element w/ chrom, start, end); 

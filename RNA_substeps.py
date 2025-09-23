@@ -1,11 +1,7 @@
 #!/usr/bin/env python3
 import argparse 
 import subprocess
-
-from align_tools import * 
-from bam_tools import b2bw
-# STAR_PE, featurecount, rsem_quantify
-
+import os 
 
 def args_parser():
     '''parser the argument from terminal command'''
@@ -13,7 +9,7 @@ def args_parser():
     # important parameters 
     # parser.add_argument("-ref", "--reference", required = False, help = "reference genome")
     parser.add_argument("-gtf", "--gtf", help = "reference gtf file used for alignment")
-    parser.add_argument("-o", "--output", help="output directory name")
+    parser.add_argument("-o", "--output", help="output name")
     parser.add_argument("-n", "--thread", help = "threads to use")
     parser.add_argument("-index_dir", "--index_dir", required = False, help = "alignment index file")
     # separate argumentparser for sub-parsers
@@ -43,15 +39,18 @@ def main():
     output = args.output
     thread = args.thread
     if args.command == "align":
+        from utilities.align_tools import STAR_PE
         star_index = args.index_dir
         r1 = args.fastq[0]; r2 = args.fastq[-1]
         STAR_PE(r1, r2, star_index, gtf, output, thread)
     if args.command == "count":
         bam = args.bam 
+        from utilities.align_tools import featurecount, parse_featurecount
         featurecount(bam, gtf, output, thread)
         output_clean = parse_featurecount(output)
         output_clean.to_csv(output + ".featurecount", sep = "\t", header = True, index = False)
     if args.command == "quantify":
+        from utilities.align_tools import rsem_quantify, parse_rsem
         r1 = args.fastq[0]; r2 = args.fastq[-1]
         rsem_index = args.index_dir
         if not os.path.exists(output + ".genes.results") or not os.path.exists(output + ".isoforms.results"):
@@ -61,8 +60,9 @@ def main():
     if args.command == "bigwig":
         bam = args.bam 
         bw = output + ".bw"
+        from utilities.bam_tools import bam2bw 
         if not os.path.exists(bw):
-            b2bw(bam, bw, thread)
+            bam2bw(bam, bw, thread)
 
 if __name__ == "__main__":
     main()

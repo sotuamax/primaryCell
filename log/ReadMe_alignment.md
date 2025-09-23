@@ -18,8 +18,7 @@
 #### reference genome
 - hg38 (downloaded from GENCODE)
 - nucleotide seq of GRCh38 primary genome assembly (/data/jim4/Reference/human/GRCh38.p14/fasta/GRCh38.primary_assembly.genome.fa); 
-- 
-  
+
 
 #### Primary celltypes
 - five blood celltypes (B, CD4, CD8, Monocyte, NK, all selected from blood sample);
@@ -120,7 +119,6 @@
   - `hic_align.py qc`;
   - `hic_format.py <bam> -o <out> -n 12`;
 
-
 - bed: 
   * stores "bedpe" file generated using bedtools from **clean BAM** 
   `bedtools bamtobed -i input.bam -bedpe > output.bedpe`
@@ -136,8 +134,7 @@
     * For downstream visualization purposes, RPKM normalization performed. 
     * BAM input: '/data/jim4/Seq/primary_cell_project/alignment/DNase/merged/pos_sorted_w_good_sample/*bam' most updated on 02/27/2025 
     `bamCoverage -b input.bam --blackListFileName hg38_blacklist.bed -o output.bw -of bigwig -p 24 --normalizeUsing RPKM`
-    * RPKM (per bin) = number of
-    *  reads per bin / (number of mapped reads (in millions) * bin length (kb))
+    * RPKM (per bin) = number of reads per bin / (number of mapped reads (in millions) * bin length (kb))
 
 - pairs 
   * this format is a intermediate format prepared for cooler and juicer to generate cool and hic file 
@@ -171,7 +168,7 @@
 - refer to [here](https://github.com/macs3-project/MACS/discussions/435) about its setting; 
 - Generated using MACS3 with "--nomodel" setting 
   * For DNase-seq: 
-  `macs3 callpeak -q 0.01 --keep-dup all -g hs -t input.bed -f BED --nomodel --extsize 200 --shift -100 --outdir . -n output_name`
+  `macs3 callpeak -q 0.01 --keep-dup all -g hs -t input.bed -f BED --nomodel --shift -100 --extsize 200 --outdir . -n output_name`
     * see "raw" for peaks called using all samples combined BED; 
     * see "peak_w_good_sample" for peaks called using good samples; 
     * see "noblacklist" for peaks that filtered out peaks overlapping blacklist region (based on peaks generated using combined good sample BED files); 
@@ -182,6 +179,7 @@
   * For Hi-TrAC: 
   `macs3 callpeak -q 0.01 --keep-dup all -g hs -t input.bed -f BED --nomodel --shift -100 --extsize 200 --outdir . -n output_name`
   Note: *.xls stores the command history, so **do not** delete it. 
+  Note: BAM (for some reason) cannot successfully make peak call; use bed 
     * Peaks call for Hi-TrAC data: 
       Using all reads; 
       Using all cis reads; 

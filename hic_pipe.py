@@ -108,6 +108,7 @@ def main():
         for row in sample_df.itertuples():
             print(f"Processing {row.id}")
             read = os.path.join(dir, row.id)
+            print(read)
             # preprocessing step 
             pre_step = f"hic_align.py pre -read {read} -n {n}"
             # subprocess.call(pre_step, shell = True)

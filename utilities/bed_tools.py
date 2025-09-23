@@ -3,6 +3,14 @@ import numpy as np
 import bioframe as bf
 import os 
 
+def bedpe_dist(bedpe_f):
+    dist_list = list()
+    for chunk in pd.read_table(bedpe_f, sep = "\t", header = None, names = ["chrom1", "start1", "end1", "chrom2", "start2", "end2", "name", "score", "strand1", "strand2"], chunksize = 10000):
+        for row in chunk.itertuples():
+            if row.chrom1 == row.chrom2:
+                pe_dist = row.end2 - row.start1 
+                dist_list.append(pe_dist)
+    return dist_list 
 
 def tether_bed(anchor_df, distance):
     """
@@ -38,7 +46,7 @@ def cis_trans_bed(bed):
         trans_pair += len(chunk_df.query("chrom1 != chrom2"))
         close_pair += len(chunk_df.query("chrom1 == chrom2 and start2 - start1 < 1000"))
     valid_pair_ratio = (cis_pair - close_pair)/(cis_pair + trans_pair)
-    log_dict = {"cis":int(cis_pair), "trans":int(trans_pair), "cis_yield":int(cis_pair)/(cis_pair + trans_pair), "short_distance":int(close_pair), "cis_valid_yield":float(valid_pair_ratio)}
+    log_dict = {"cis":int(cis_pair), "trans":int(trans_pair), "cis_yield (cis/(cis+trans))":int(cis_pair)/(cis_pair + trans_pair), "short_distance (<1 kb)":int(close_pair), "long_distance (>1 kb)":(cis_pair-close_pair)/int(cis_pair), "cis_valid_yield (>1k cis/(cis+trans))":float(valid_pair_ratio)}
     return log_dict 
 
 def bed2fasta(bed, ref, out = None):

@@ -3,6 +3,10 @@ import subprocess
 import os 
 import pandas as pd 
 
+def flagstats(bam, n):
+    name = bam.replace(".bam", "")
+    subprocess.call(f"samtools flagstats {bam} -@ {n} -O tsv > {name}.flagstat", shell = True)
+
 def examine_sort(bam):
     """
     Examine BAM as name or coordinates sorted
@@ -52,7 +56,7 @@ def cigar_extract(read_df):
     cigar_df.index = read_df.index
     return cigar_df
 
-def bam2bed(bam, label = "cDNA", read_seq = False, chrom= None):
+def bam2bed(bam, label = "cDNA", read_seq = False, chrom = None):
     """
     Transform bam into bed format
     Input: 
@@ -67,28 +71,21 @@ def bam2bed(bam, label = "cDNA", read_seq = False, chrom= None):
     # read_df = pd.DataFrame(read_df, columns = ["read", "seq", 'strand', "cigar"])
     if label.upper() in ["CDNA", "RNA"]:
         # for RNA-seq alignment, ("NH", 1) to get unique alignment (no quality filter, MAPQ see score)
-        if chrom is None:
-            if read_seq == True:
-                read_bed = pd.DataFrame([[read.reference_name, read.reference_start,read.reference_end, read.query_name, read.mapping_quality, strandness[read.is_forward],read.cigarstring, read.query_sequence] for read in bam_handle.fetch() if ("NH", 1) in read.tags])
-            else:
-                read_bed = pd.DataFrame([[read.reference_name, read.reference_start,read.reference_end, read.query_name, read.mapping_quality, strandness[read.is_forward],read.cigarstring] for read in bam_handle.fetch() if read.get_tag("NH") == 1])
+        if read_seq:
+            read_bed = pd.DataFrame([[read.reference_name, read.reference_start,read.reference_end, read.query_name, strandness[read.is_forward], read.cigarstring, read.query_sequence] for read in bam_handle.fetch(chrom) if ("NH", 1) in read.tags])
         else:
-            if read_seq:
-                read_bed = pd.DataFrame([[read.reference_name, read.reference_start,read.reference_end, read.query_name, read.mapping_quality, strandness[read.is_forward],read.cigarstring, read.query_sequence] for read in bam_handle.fetch(chrom) if ("NH", 1) in read.tags])
-            else:
-                read_bed = pd.DataFrame([[read.reference_name, read.reference_start,read.reference_end, read.query_name, read.mapping_quality, strandness[read.is_forward],read.cigarstring] for read in bam_handle.fetch(chrom) if read.get_tag("NH") == 1])
+            read_bed = pd.DataFrame([[read.reference_name, read.reference_start,read.reference_end, read.query_name, strandness[read.is_forward]] for read in bam_handle.fetch(chrom) if read.get_tag("NH") == 1])
     if label.upper() == "DNA":
         # for DNA-seq alignment, filtering on primary alignment (no quality filter, MAPQ see score)
         if read_seq:
-            read_bed = pd.DataFrame([[read.reference_name,read.reference_start,read.reference_end,read.query_name, read.mapping_quality, strandness[read.is_forward], read.cigarstring, read.query_sequence] for read in bam_handle.fetch() if (not read.is_secondary) and (not read.is_supplementary) and (not read.is_unmapped)])
-            
+            read_bed = pd.DataFrame([[read.reference_name,read.reference_start,read.reference_end,read.query_name, strandness[read.is_forward], read.cigarstring, read.query_sequence] for read in bam_handle.fetch() if (not read.is_secondary) and (not read.is_supplementary) and (not read.is_unmapped)])
         else:
-            read_bed = pd.DataFrame([[read.reference_name,read.reference_start,read.reference_end,read.query_name, read.mapping_quality, strandness[read.is_forward], read.cigarstring] for read in bam_handle.fetch() if (not read.is_secondary) and (not read.is_supplementary) and (not read.is_unmapped)])
+            read_bed = pd.DataFrame([[read.reference_name,read.reference_start,read.reference_end,read.query_name, strandness[read.is_forward], read.cigarstring] for read in bam_handle.fetch() if (not read.is_secondary) and (not read.is_supplementary) and (not read.is_unmapped)])
     if read_seq and len(read_bed) > 0:
-        read_bed.columns = ["chrom", "start", "end", "name", "score", "strand", "cigar", "seq"]
+        read_bed.columns = ["chrom", "start", "end", "name", "strand", "cigar", "seq"]
         return read_bed
     if not read_seq and len(read_bed) > 0:
-        read_bed.columns = ["chrom", "start", "end", "name", "score", "strand", "cigar"]
+        read_bed.columns = ["chrom", "start", "end", "name", "strand"]
         return read_bed
     if len(read_bed) == 0:
         return None
@@ -101,17 +98,18 @@ def sc_markdup(bam, output, n):
     write fragment file (for each of the fragment, label its frquency); 
     duplication rate; 
     """
+    strandness = {True:"+", False:"-"}
     bam_handle = pysam.AlignmentFile(bam, "rb", threads = n)
     i = 0; unique_i = 0
     with pysam.AlignmentFile(output, "wb", template = bam_handle, threads = n) as newbam:
         for chr in bam_header(bam, seq = True):
             print(f"Processing {chr} ...")
-            bam_tmp = [(read.query_name.split(":")[-1], read.reference_start, read.reference_end, read.query_name, read) for read in bam_handle.fetch(chr)]
+            bam_tmp = [(read.query_name.split(":")[-1], read.reference_start, read.reference_end, read.query_name, strandness[read.is_forward], read) for read in bam_handle.fetch(chr)]
             if len(bam_tmp) > 0:
-                bam_tmp = pd.DataFrame(bam_tmp, columns = ["index", "start", "end", "name", "read"])
-                bam_tmp["label"] = bam_tmp.groupby(["index", "start", "end"])["name"].rank(method = "first").astype(int)
-                bam_tmp["chrom"] = chr; bam_tmp["n"] = bam_tmp.groupby(["index", "start", "end"]).transform("size")
-                bam_tmp[["chrom", "start", "end", "index", "n"]].drop_duplicates(keep = "first").to_csv(output.replace(".bam", ".fragment"), sep = "\t", header = False, index = False, mode = "a")
+                bam_tmp = pd.DataFrame(bam_tmp, columns = ["index", "start", "end", "name", "strand", "read"])
+                bam_tmp["label"] = bam_tmp.groupby(["index", "start", "end", "strand"])["name"].rank(method = "first").astype(int)
+                bam_tmp["chrom"] = chr; bam_tmp["n"] = bam_tmp.groupby(["index", "start", "end", "strand"]).transform("size")
+                #bam_tmp[["chrom", "start", "end", "strand", "index", "n"]].drop_duplicates(keep = "first").to_csv(output.replace(".bam", ".fragment"), sep = "\t", header = False, index = False, mode = "a")
                 bam_pick = bam_tmp.query("label == 1")
                 for row in bam_pick.itertuples():
                     newbam.write(row.read)
@@ -198,10 +196,11 @@ def bed2saf(bed):
     saf["strand"] = "."
     saf.to_csv(name, sep = "\t", header = False, index = False)
 
-def bamfilter(bam, output, select_read = None, threads = 1, clip_check = False, chrom = True):
+def bamfilter(bam, output, select_read = None, threads = 1, clip_check = False, two_end_clip_check = False, chrom = False):
     """
     Rewrite new bam file by given selected reads name
     """
+    # strandness = {True:"+", False:"-"}
     if not output.endswith(".bam"):
         output += ".bam"
     if chrom:
@@ -217,39 +216,45 @@ def bamfilter(bam, output, select_read = None, threads = 1, clip_check = False, 
                     newbam.write(read)
     else:
         if clip_check and chrom:
-            import re 
-            strandness = {True:"+", False:"-"}
+            import re
             # need to examine the 5' end read for any soft-clip 
             with pysam.AlignmentFile(output, "wb", template = bam_handle, threads = threads) as newbam:
                 for read in bam_handle.fetch():
                     if read.reference_name in ref_list and read.mapping_quality > 30 and (not read.is_secondary) and (not read.is_supplementary) and (not read.is_unmapped):
                         if "S" in read.cigarstring:
-                            if (re.findall(r'[A-Z=]', read.cigarstring)[0] == "S" and strandness[read.is_forward]) or (re.findall(r'[A-Z=]', read.cigarstring)[-1] == "S" and strandness[read.is_reverse]):
+                            if (re.findall(r'[A-Z=]', read.cigarstring)[0] == "S" and read.is_forward) or (re.findall(r'[A-Z=]', read.cigarstring)[-1] == "S" and read.is_reverse):
                                 pass 
                             else:
                                 newbam.write(read)
                         else:
                             newbam.write(read)
-        if clip_check and not chrom:
-            import re 
-            strandness = {True:"+", False:"-"}
+        elif clip_check and not chrom:
+            print("Filter on 5' end (no clip) ...")
+            import re
             # need to examine the 5' end read for any soft-clip 
             with pysam.AlignmentFile(output, "wb", template = bam_handle, threads = threads) as newbam:
                 for read in bam_handle.fetch():
                     if read.mapping_quality > 30 and (not read.is_secondary) and (not read.is_supplementary) and (not read.is_unmapped):
                         if "S" in read.cigarstring:
-                            if (re.findall(r'[A-Z=]', read.cigarstring)[0] == "S" and strandness[read.is_forward]) or (re.findall(r'[A-Z=]', read.cigarstring)[-1] == "S" and strandness[read.is_reverse]):
+                            if (re.findall(r'[A-Z=]', read.cigarstring)[0] == "S" and read.is_forward) or (re.findall(r'[A-Z=]', read.cigarstring)[-1] == "S" and read.is_reverse):
                                 pass 
                             else:
                                 newbam.write(read)
                         else:
                             newbam.write(read)
-        if not clip_check and chrom:
+        elif two_end_clip_check and chrom:
             with pysam.AlignmentFile(output, "wb", template = bam_handle, threads = threads) as newbam:
                 for read in bam_handle.fetch():
                     if read.reference_name in ref_list and read.mapping_quality > 30 and (not read.is_secondary) and (not read.is_supplementary) and (not read.is_unmapped):
-                        newbam.write(read)
-        if not clip_check and not chrom: 
+                        if (not "S" in read.cigarstring):
+                            newbam.write(read)
+        elif two_end_clip_check and not chrom:
+            with pysam.AlignmentFile(output, "wb", template = bam_handle, threads = threads) as newbam:
+                for read in bam_handle.fetch():
+                    if read.mapping_quality > 30 and (not read.is_secondary) and (not read.is_supplementary) and (not read.is_unmapped):
+                        if ("S" not in read.cigarstring):
+                            newbam.write(read)
+        else:
             with pysam.AlignmentFile(output, "wb", template = bam_handle, threads = threads) as newbam:
                 for read in bam_handle.fetch():
                     if read.mapping_quality > 30 and (not read.is_secondary) and (not read.is_supplementary) and (not read.is_unmapped):

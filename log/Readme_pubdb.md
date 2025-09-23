@@ -64,8 +64,6 @@
   	- 100way: 99 vetebrate align against human genome;
   	- 470way: 469 vetebrate align against human genome. 
 
-
-
 #### TOPMed
 - see home page [here](https://topmed.nhlbi.nih.gov/about);
 - see [publication](https://doi.org/10.1038/s41586-021-03205-y);

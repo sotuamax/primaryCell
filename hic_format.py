@@ -32,7 +32,8 @@ from utilities.misc import timeit
 def args_parser():
     '''parser the argument from terminal command'''
     parser = argparse.ArgumentParser(prog = "PROG", formatter_class = argparse.RawDescriptionHelpFormatter, add_help = True, usage="hic_format.py -o <out> input.bam ")
-    parser.add_argument("bam", help = "input bam file (either coordinate or name sorted, provide name sorted file to save time)")
+    parser.add_argument("input", help = "input file (either BAM file coordinate or name sorted, provide name sorted file to save time; or pairs file sorted and compressed for UU reads)")
+    parser.add_argument("-of", "--output_format", help = "output file format", choices = ["pairs", "cool", "hic"])
     parser.add_argument("-o", "--output", required = True, help = "output file name (prefix)")
     parser.add_argument("-n", "--thread", default = 2, type = int, help = "thread to process bam")
     parser.add_argument("-chrsize", "--chrsize", required = False, default = "/data/jim4/Reference/human/GRCh38.p14/GRCh38_chrsize.bed", help = "file for ordered chromosome and size")
@@ -43,54 +44,47 @@ def args_parser():
 def main():
     start = time.time()
     args = args_parser()
-    bam = args.bam
-    from utilities.bam_tools import examine_sort
-    try:
-        b_sort = examine_sort(bam)
-        print("BAM is sorted by", b_sort)
-    except Exception as e: 
-        print(e)
-        exit(1)
+    input_file = args.input
     n = args.thread
-    if b_sort == "coordinate":
-        print("Sort BAM by name ...")
-        # when bam is not sorted, sort it and store in default directory 
-        #sort_dir = "/data/jim4/Seq/primary_cell_project/alignment/HiTrAC/sortn"
-        new_bam = bam.replace(".bam", ".n.bam")
-        command = f"samtools sort -@ {n} -n -o {new_bam} {bam}"
-        print(command)
-        subprocess.call(command, shell=True)
-        bam = new_bam
-    # output name 
     out = args.output
     chrsize = args.chrsize 
     assembly = args.assembly
-    # generate pairs 
-    if not os.path.exists(out + ".pairs.gz"):
-        # use standard pairtools to generate pairs file 
-        print("Generate compressed pairs ...")
-        # BAM must be name sorted 
-        print(f"Run pairtools w/ {n} threads ...")
-        pair_command = f"pairtools parse {bam} -c {chrsize} --assembly {assembly} --nproc-in {n} --nproc-out {n} --drop-sam | pairtools sort --nproc {n} -o {out}.pairs.gz --memory 20g"
-        # drop-sam: do not add sams to the output 
-        print(pair_command)
-        subprocess.call(pair_command, shell = True)
-    # if not os.path.exists(out + ".pairs.gz"):
-    #     subprocess.call(f"pairtools sort {out}.pairs.gz -o {out}_sort.pairs.gz --nproc {n} --memory 40g", shell = True)
-    # generate cool
-    if not os.path.exists(out + ".cool"):
-        print("Load pairs to generate cool at 1k ...")
-        # https://cooler.readthedocs.io/en/latest/cli.html#cooler-cload-pairs
-        # pairs do NOT be sorted. Accept compressed file. 
-        cool_command = f"cooler cload pairs --assembly {assembly} {chrsize}:1000 {out}.pairs.gz {out}.cool -c1 2 -p1 3 -c2 4 -p2 5"
-        print(cool_command)
-        subprocess.call(f"cooler cload pairs --assembly {assembly} {chrsize}:1000 {out}.pairs.gz {out}.cool -c1 2 -p1 3 -c2 4 -p2 5", shell = True)
-    if not os.path.exists(out + ".mcool"):
-        print("Generate mcool at 1,5,10,25,50,100 kb resolutions ...")
-        mcool_command = f"cooler zoomify {out}.cool -n {n} -r 1000,5000,10000,25000,40000,50000 -o {out}.mcool"
-        print(mcool_command)
-        print(f"Run cooler w/ {n} threads ...")
-        subprocess.call(mcool_command, shell = True)
+    if args.output_format == "pairs":
+        if not input_file.endswith(".bam"):
+            raise ValueError("Input file is not in BAM format!")
+        bam = input_file 
+        from utilities.bam_tools import examine_sort
+        try:
+            b_sort = examine_sort(bam)
+            print("BAM is sorted by", b_sort)
+        except Exception as e: 
+            print(e)
+            exit(1)
+        if b_sort == "coordinate":
+            pair_command = f"samtools sort -@ {n} -n {bam} | pairtools parse -c {chrsize} --assembly {assembly} --nproc-in {n} --nproc-out {n} --drop-sam | pairtools select --nproc-in {n} --nproc-out {n} '(pair_type==\"UU\")' | pairtools sort --nproc-in {n} --nproc-out {n} -o {out}.pairs.gz"
+        if b_sort == "name":
+            pair_command = f"pairtools parse {bam} -c {chrsize} --assembly {assembly} --nproc-in {n} --nproc-out {n} --drop-sam | pairtools select --nproc-in {n} --nproc-out {n} '(pair_type==\"UU\")' | pairtools sort --nproc-in {n} --nproc-out {n} -o {out}.pairs.gz"
+        if not os.path.exists(out + ".pairs.gz"):
+            # use standard pairtools to generate pairs file 
+            print("Generate pairs ...")
+            print(pair_command)
+            subprocess.call(pair_command, shell = True)
+    if args.output_format == "cool":
+        if not input_file.endswith(".pairs.gz"):
+            raise ValueError("Input file is not in pairs format!")
+        if not os.path.exists(out + ".cool"):
+            print("Load pairs to generate cool at 1k ...")
+            # https://cooler.readthedocs.io/en/latest/cli.html#cooler-cload-pairs
+            # pairs do NOT to be sorted. Accept compressed file. 
+            cool_command = f"cooler cload pairs --assembly {assembly} {chrsize}:1000 {out}.pairs.gz {out}.cool -c1 2 -p1 3 -c2 4 -p2 5"
+            print(cool_command)
+            subprocess.call(cool_command, shell = True)
+        if not os.path.exists(out + ".mcool"):
+            print("Generate mcool at 1,5,10,25,50,100 kb resolutions ...")
+            mcool_command = f"cooler zoomify {out}.cool -n {n} -r 1000,5000,10000,25000,40000,50000 -o {out}.mcool"
+            print(mcool_command)
+            print(f"Run cooler w/ {n} threads ...")
+            subprocess.call(mcool_command, shell = True)
     # generate hic
     if not os.path.exists(out + ".hic"):
         # although cool no need to sort pairs, juicer must sort pairs by chromosome 

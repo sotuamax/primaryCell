@@ -46,6 +46,7 @@ def remote_transfer(json_path, GC_list, destination):
             for dir,dir_f in file_df.groupby("directory"):
                 # all_file4transfer = " :".join(file_list)
                 run_number = os.path.basename(dir).split("_")[0]
+                print(f"Find data in {run_number}!")
                 dir_f[['file']].to_csv(run_number + ".download", sep = "\t", header = False, index = False)
                 if not os.path.exists(os.path.join(destination, run_number)): 
                     os.mkdir(os.path.join(destination, run_number))

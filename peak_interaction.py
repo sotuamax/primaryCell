@@ -1,4 +1,22 @@
 #!/usr/bin/env python
+"""
+This program performs two modes. One for detection of significant interactions; One for count reads supporting interactions.
+
+mode - detect: 
+This mode takes input contact data in cool format, and examine chromosome arm by arm (supports hg38/mm39 for now). 
+For interaction candidates, given a peak file and paired peaks are examined for significance as compared to its background contact signals. 
+Background region is controlled by window size (for example, examine 5/10/20/50 windows at resolution 1000 surrounding the candidate region), and the expected count is estimated by background average; 
+The p-value for significance between observed vs. expected is estimated using poisson distribution (that is at certain distance, an 'lambda' contacts can happen where lambda is the average number of contacts at this distance, we can get the p-value for the observed contacts); 
+Paired peaks for examination are screened one by one util certain number of 0s encountered before giving up.  
+
+mode - count: 
+This mode takes input contact data in cool format and interaction site in bedpe format for examination, and it reports the total number of reads supporting the interaction site. 
+
+Example (trigger multiple cores using MPI): 
+mpiexec -n 10 peak_interaction.py detect -w 5 10 20 50 100 -cool sample.mcool -r 1000 -peak sample.bed -o sample -w 
+mpiexec -n 10 peak_interaction.py count -cool sample.mcool -r 1000 -interaction sample.bedpe -o sample 
+
+"""
 import bioframe as bf 
 import numpy as np 
 import pandas as pd
@@ -12,18 +30,15 @@ from datetime import datetime
 from utilities.misc import ignore_warning
 ignore_warning()
 
+
 def args_parser():
     '''parser the argument from terminal command'''
     parser=argparse.ArgumentParser(prog = "PROG", formatter_class = argparse.RawDescriptionHelpFormatter, description="\
-    peak_interaction.py \
-    -ref hg38\
-    -cool sample.mcool \
-    -peak sample.narrowPeak\
-    -o sample")
+    peak_interaction.py detect -w 5 10 20 50 100 -cool sample.mcool -peak sample.narrowPeak -o sample \n \
+    peak_interaction.py count -cool sample.mcool -r 1000 -interaction sample.bedpe -o sample \n")
     parser.add_argument("-ref", "--reference", choices = ["hg38", "mm39"], default = "hg38", help = "reference genome")
     parser.add_argument("-cool", "--cool", required = True, help = "cool input file")
     parser.add_argument("-chrom", "--chromosome", required = False, nargs = "+", help = "chromosome to examine")
-    #parser.add_argument("-region", "--region", required = False, help = "chromosome region to examine in a bed file (no header line)")
     parser.add_argument("-r", "--resolution", default = 1000, type = int, help = "resolution in bp for cool file (default: 1000)")
     parser.add_argument("-o", "--output", help = "output prefix to use")
     parser2 = argparse.ArgumentParser(prog = "PROG", add_help = True)
@@ -62,7 +77,7 @@ def poisson_p(obs_exp_df, window:list):
         obs_exp_pair = set(zip(obs_exp_df["obs"], obs_exp_df[f"lambda_{w}"]))
         o, e = zip(*obs_exp_pair)
         oe_p = poisson.sf(np.array(o), np.array(e))
-        df_eop = pd.DataFrame(); df_eop["obs"] = o; df_eop[f"lambda_{w}"] = e; df_eop[f"p_{w}"] = oe_p
+        df_eop = pd.DataFrame({"obs":o, f"lambda_{w}":e, f"p_{w}":oe_p})
         obs_exp_df = pd.merge(obs_exp_df, df_eop, on = ["obs", f"lambda_{w}"])
     return obs_exp_df
 
@@ -70,7 +85,7 @@ def bh_correction(obs_exp_p, window:list, fdr:float):
     # from scipy.stats import false_discovery_control 
     for w in window:
         obs_exp = list()
-        for lbin, lbin_df in obs_exp_p.groupby(f"lambda_{w}"):
+        for _, lbin_df in obs_exp_p.groupby(f"lambda_{w}"):
             lbin_df[f"q_{w}"] = lbin_df[f"p_{w}"].rank()*fdr/len(lbin_df)
             obs_exp.append(lbin_df)
         obs_exp_p = pd.concat(obs_exp, axis = 0)
@@ -94,7 +109,6 @@ def bin2peak(obs_exp_enrich, peak_df, resolution):
     peak_df["end2"] = peak_df["end"]//resolution+1
     peak_df["chrom1"] = peak_df["chrom"]
     peak_df["chrom2"] = peak_df["chrom"]
-    # 
     left_merge = pd.merge(obs_exp_enrich, peak_df[["chrom1", "start1", "end1", "start", "end"]], on = ["chrom1", "start1", "end1"], how = "left")
     left_merge["start1"] = left_merge["start"]
     left_merge["end1"] = left_merge["end"]
@@ -215,7 +229,6 @@ def main():
         except Exception as e:
             print(e)
             exit(1)
-        #
         rank_list = list()
         for arm_region in tqdm(worker_tasks[rank], desc = f"Core:{rank+1}/{size}", position = 0):
             # arm_region stores (chrom, region-start, region-end) # it is also a key for a dictionary

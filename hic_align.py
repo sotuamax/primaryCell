@@ -93,9 +93,9 @@ def main():
     if args.command == "pre": # log file written by fastp 
         read = args.read
         #readdir = args.readdir
-        r1 = glob.glob(f"{read}_*R1*.fastq.gz")
+        r1 = glob.glob(f"{read}_*R1.fastq.gz")
         #os.path.join(readdir, read + "_R1.fastq.gz")
-        r2 = glob.glob(f"{read}_*R2*.fastq.gz") # os.path.join(readdir, read + "_R2.fastq.gz")
+        r2 = glob.glob(f"{read}_*R2.fastq.gz") # os.path.join(readdir, read + "_R2.fastq.gz")
         if len(r1) == 1 and len(r2) == 1:
             #print(r1+r2)
             print("Locate fastq files ... ")

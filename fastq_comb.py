@@ -2,7 +2,7 @@
 
 """Give the directory of fastq file, identical GC number files are merged
 Example:
-fastq_comb.py -dir run0001/ -dest merged_dir/
+fastq_comb.py -dir run0001/ run0002/ run0003/ -dest merged_dir/
 """
 
 import subprocess 
@@ -12,7 +12,8 @@ import os
 
 def args_parser():
     '''parser the argument from terminal command'''
-    parser=argparse.ArgumentParser(prog = "PROG", formatter_class = argparse.RawDescriptionHelpFormatter, description="")
+    parser=argparse.ArgumentParser(prog = "PROG", formatter_class = argparse.RawDescriptionHelpFormatter, description="For example:" \
+    "fastq_comb.py -dir run0001/ run0002/ run0003/ -dest merged_dir/ ")
     parser.add_argument("-dir", "--directory", nargs = "+", help = "master directories for  sequencing data")
     parser.add_argument("-dest", "--destination", default = ".", help = "destination to store the merged files")
     args=parser.parse_args()

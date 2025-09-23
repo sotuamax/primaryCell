@@ -51,11 +51,12 @@ def main():
     # 
     narrowPeak_col = peak_df.columns.tolist()
     #  extend peaks given min dist
-    peak_df["summit"] = peak_df["start"] + peak_df["relSummit"]
-    peak_df["start"] = np.where(peak_df["summit"] - peak_df["start"] < args.min_dist, peak_df["summit"]-args.min_dist, peak_df["start"])
-    peak_df["end"] = np.where(peak_df["end"] - peak_df["summit"] < args.min_dist, peak_df["summit"]+args.min_dist, peak_df["end"])
-    peak_df["relSummit"] = peak_df["summit"] - peak_df["start"]
-    peak_df.drop("summit", axis=1, inplace = True)
+    # peak_df["name"] = peak_df["name"].astype(str)
+    # peak_df["summit"] = peak_df["start"] + peak_df["relSummit"]
+    # peak_df["start"] = np.where(peak_df["summit"] - peak_df["start"] < args.min_dist, peak_df["summit"]-args.min_dist, peak_df["start"])
+    # peak_df["end"] = np.where(peak_df["end"] - peak_df["summit"] < args.min_dist, peak_df["summit"]+args.min_dist, peak_df["end"])
+    # peak_df["relSummit"] = peak_df["summit"] - peak_df["start"]
+    # peak_df.drop("summit", axis=1, inplace = True)
     # get summit bed 
     summit_df = peak_df[["chrom", "start", "relSummit", "name"]].copy()
     summit_df["summit"] = summit_df["start"] + summit_df["relSummit"]

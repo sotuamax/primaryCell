@@ -3,6 +3,7 @@
 import os 
 import pandas as pd
 import argparse
+import numpy as np 
 
 def args_parser():
     '''parser the argument from terminal command'''
@@ -10,6 +11,8 @@ def args_parser():
     # important parameters 
     parser.add_argument("-sample", "--sample", help="sample prefix used to find fastq file")
     parser.add_argument("-outdir", "--outdir", default = ".", help="output directory name")
+    # parser.add_argument("-p", "--plot", help = "plot GFP read distribution", action = "store_true")
+    # parser.add_argument("-cap", "--cap", help = "CAP file", required = False)
     args=parser.parse_args()
     return args
 
@@ -19,58 +22,69 @@ def main():
     output_dir = args.outdir
     # read GFP results 
     print("Read GFP results ...")
-    gfp_sublibrary_summary_df = pd.read_excel(os.path.join(output_dir, sample + "GFP.xlsx"), sheet_name  = "summary")
-    gfp_tag_gene_df = pd.read_excel(os.path.join(output_dir, sample + "GFP.xlsx"), sheet_name  = "flag_gene")
-    gfp_tag_gene_df.columns = [c.strip("_") for c in gfp_tag_gene_df.columns]
-    # gfp_tag_gene_df["index"] = gfp_tag_gene_df["barcode"].str.slice(0,15)
-    # gfp_tag_gene_df = pd.merge(gfp_sublibrary_summary_df[["library", "index"]], gfp_tag_gene_df, how = "right", on = "index")
-    # gfp_tag_gene_df.sort_values(by = ['library', "index"], inplace=True, ignore_index=True)
-    # read ChiC summary 
-    print("Read ChiC results ...")
-    chic_sublibrary_summary = pd.read_table(os.path.join(output_dir, sample + ".pre.txt"), sep = "\t", header = 0)
-    total_GFP_read = gfp_sublibrary_summary_df["total_reads"].sum()
-    primer_yield = gfp_sublibrary_summary_df["primer_yield"].mean()
-    barcode_yield = gfp_sublibrary_summary_df["barcode_yield"].mean()
-    gfp_yiled = gfp_sublibrary_summary_df["final_yield"].mean()
-    cds_total = gfp_sublibrary_summary_df["CDS_align"].sum()
-    frame_total = gfp_sublibrary_summary_df["frame_count"].sum()
-    target_frame = round(frame_total/cds_total*100, 1)
-    gene_freq = gfp_tag_gene_df.groupby("symbol").size().reset_index()
-    gene_freq.columns = ["symbol", "freq"]
-    gene_freq.sort_values(by = ["freq"], ascending=False, inplace = True, ignore_index=True)
-    gene1 = gene_freq.iloc[0,0]; gene2 = gene_freq.iloc[1,0]; gene3 = gene_freq.iloc[2,0]
-    freq1 = gene_freq.iloc[0,1]; freq2 = gene_freq.iloc[1,1]; freq3 = gene_freq.iloc[2,1]
-    # read ChiC read per cell with GFP data
-    if os.path.exists(os.path.join(output_dir, sample + "_clean_barcode.stat")):
-        GFP_ChiC_df = pd.read_table(os.path.join(output_dir, sample + "_clean_barcode.stat"), sep = "\t", header = 0)
-    else:
-        gfp_tag_gene_df
-    ### 
-    gfp_df = pd.DataFrame({"Total reads":[round(total_GFP_read)], 
-                  "Valid primer (%)":[round(primer_yield,1)], 
-                  "Valid barcodes (%)":[round(barcode_yield, 1)], 
-                  "Valid reads (%)":[round(gfp_yiled, 1)]}).transpose()
-    gfp_gene_df = pd.DataFrame({"Valid frame (%)" : [target_frame], 
-                  "Total unique genes":[len(gene_freq)],
-                  "Top target genes":[", ".join([gene1, gene2, gene3])],
-                  "Top target freq":[", ".join([str(freq1), str(freq2), str(freq3)])]}).transpose()
-    #print(gfp_df)
+    rna_df = pd.read_table(os.path.join(output_dir, sample + "GFP_rna.gene.stat"), sep = "\t", header = 0)
+    dna_df = pd.read_table(os.path.join(output_dir, sample + "_dna.stat"))
+    combined_df = pd.read_table(os.path.join(output_dir, sample + "_combined.stat"), sep = "\t", header = 0)
+    filtered_df = pd.read_table(os.path.join(output_dir, sample + "_combined_filtered.stat"), sep = "\t", header = 0)
+    
+    # about GFP_filter column: 
+    # 1 -> ChiC w/ GFP support and GFP for single gene; 
+    # 0 -> ChiC w/ GFP support and GFP not pass criteria; 
+    # -1 -> ChiC wo/ GFP reads support.
+    # freq_df = filtered_df.groupby(["symbol", "label"]).size().reset_index(name = "freq")
+    # s_list = list()
+    # for s, s_df in freq_df.groupby("symbol"):
+    #     if len(s_df.query("label == 0")["freq"]) == 1:
+    #         a = s_df.query("label == 0")["freq"].item() 
+    #     else:
+    #         a = 0
+    #     if len(s_df.query("label == 1")["freq"]) == 1:
+    #         b = s_df.query("label == 1")["freq"].item()
+    #     else:
+    #         b = 0
+    #     s_list.append((s, a, b))
+    # s_group = pd.DataFrame(s_list, columns = ["symbol", "groupA", "groupB"])
+    # baseline = s_group["groupA"].sum()/s_group["groupB"].sum()
+    # s_group["AB"] = (s_group["groupA"]/s_group["groupB"])/baseline
+    # s_group["score"] = s_group["AB"]/baseline
+    # gfp_df = pd.DataFrame({"Total reads":[round(total_GFP_read)], 
+    #               "Valid primer (%)":[round(primer_yield,1)], 
+    #               "Valid barcodes (%)":[round(barcode_yield, 1)], 
+    #               "Valid reads (%)":[round(gfp_yiled, 1)]}).transpose()
+    # gfp_gene_df = pd.DataFrame({"Valid frame (%)" : [target_frame], 
+    #               "Total unique genes":[len(gene_freq)],
+    #               "Top target genes":[", ".join([gene1, gene2, gene3])],
+    #               "Top target freq":[", ".join([str(freq1), str(freq2), str(freq3)])]}).transpose()
     # read chic summary 
     total_ChiC_read = sum(chic_sublibrary_summary["total_reads"])
     ChiC_barcode_yield = chic_sublibrary_summary["barcode_yield"].mean()
     from utilities.parse_log import markdup_log_parser
     chic_dedup_df = pd.read_table(os.path.join(output_dir, sample + ".dedup.stat"), sep = "\t", header = 0, index_col = 0)
     duplication_ratio = chic_dedup_df.loc["PERCENT_DUPLICATION"].item()
+    alignment_info = pd.read_table(os.path.join(output_dir, sample + ".flagstat"), header = None, names = ["pass", "fail", "category"])
+    mapped_reads = alignment_info.query("category == 'primary mapped'")["pass"].item()
+    mapped_perc = alignment_info.query("category == 'primary mapped %'")["pass"].item()
+    # 
+    dedup_info = pd.read_table(os.path.join(output_dir, sample + ".dedup.flagstat"), header = None, names = ["pass", "fail", "category"])
+    dedup_mapped_reads = dedup_info.query("category == 'primary mapped'")["pass"].item()
+    # 
+    qc_info = pd.read_table(os.path.join(output_dir, sample + ".dedup.qc.flagstat"), header = None, names = ["pass", "fail", "category"])
+    qc_dedup_mapped_reads = qc_info.query("category == 'primary mapped'")["pass"].item()
     chic_df = pd.DataFrame({"Total reads":[round(total_ChiC_read)], 
                             "Valid barcodes (%)":[round(ChiC_barcode_yield, 1)],
-                            "Duplication (%)":[round(float(duplication_ratio)*100, 1)]}).transpose()
-    #print(chic_df)
-    # read chic png 
+                            "Mapped reads" : [mapped_reads],
+                            "Map ratio (%)":[mapped_perc],
+                            "Reads after deduplication":[dedup_mapped_reads],
+                            "Duplication (%)":[round(float(duplication_ratio)*100, 1)],
+                            "Reads after deduplication+QC":[qc_dedup_mapped_reads]}).transpose()
     chic_barcode_distribution_png = os.path.join(output_dir, sample + "_barcode.png")
     import base64
     with open(chic_barcode_distribution_png, "rb") as img_file:
         encoded_string = base64.b64encode(img_file.read()).decode('utf-8')
     img_html = f'<img src="data:image/png;base64,{encoded_string}" width="800"/>'
+    with open(os.path.join(output_dir, sample + "GFP.png"), "rb") as gfp_png:
+        gfp_string = base64.b64encode(gfp_png.read()).decode('utf-8')
+    gfp_img_html = f'<img src="data:image/png;base64,{gfp_string}" width="800"/>'
     # 
     with open(os.path.join(output_dir, sample + "_clean_barcode.png"), "rb") as img_file:
         encoded_string = base64.b64encode(img_file.read()).decode('utf-8')
@@ -95,6 +109,7 @@ def main():
     # tab pages
     gfp_summary = "<h3>GFP sequencing</h3>" + gfp_df.reset_index().to_html(index = False, header = False,border=0)
     gfp_gene_summary = "<h3>GFP gene</h3>" + gfp_gene_df.reset_index().to_html(index = False, header = False,border=0)
+    gfp_plot = "<h3>GFP reads per cell</h3>" + gfp_img_html
     chic_summary = "<h3>ChiC sequencing</h3>" + chic_df.reset_index().to_html(index = False, header = False,border=0)
     img_summary = "<h3>ChiC reads per cell</h3>" + img_html
     clean_img_summary = "<h3>ChiC reads per cell filtered by GFP</h3>" + clean_img_html
@@ -105,8 +120,10 @@ def main():
     <button class="tablinks" onclick="openTab(event, 'tab1')" id="defaultOpen1">Summary</button>
     <button class="tablinks" onclick="openTab(event, 'tab2')">GFP sublibrary summary</button>
     <button class="tablinks" onclick="openTab(event, 'tab3')">GFP tag genes</button>
-    <button class="tablinks" onclick="openTab(event, 'tab4')">GFP tag genes frequency</button>
-    <button class="tablinks" onclick="openTab(event, 'tab5')">GFP tag gene & ChiC read count</button>
+    <button class="tablinks" onclick="openTab(event, 'tab4')">ChiC reads without any filtering</button>
+    <button class="tablinks" onclick="openTab(event, 'tab5')">GFP tag genes frequency</button>
+    <button class="tablinks" onclick="openTab(event, 'tab6')">GFP tag gene & ChiC read count</button>
+    <button class="tablinks" onclick="openTab(event, 'tab7')">GFP tag gene group based on ChiC read</button>
     """
     gfp_sublibrary_summary_df.to_csv(os.path.join(output_dir, sample + "_gfp.csv"), sep = "\t", header = True, index = False)
     download_file = os.path.join(sample + "_gfp.csv")
@@ -122,11 +139,20 @@ def main():
     <button style="margin: 10px 0;">Download CSV</button>
     </a>
     """
+    raw_ChiC_sum = raw_ChiC.groupby("GFP_filter")["ChiC_read"].sum().reset_index()
+    raw_ChiC_sum["percentage(%)"] = round(raw_ChiC_sum["ChiC_read"]/sum(raw_ChiC_sum["ChiC_read"])*100, 2)
+    raw_ChiC_sum["description"] = np.where(raw_ChiC_sum["GFP_filter"] == 1, "ChiC w/ GFP support for single gene", np.where(raw_ChiC_sum["GFP_filter"] == 0, "ChiC w/ GFP support but not for target frame or single gene", "ChiC wo/ GFP support"))
+    raw_ChiC["GFP_filter"] = "GFP."+raw_ChiC["GFP_filter"].astype(str)
+    ChiC_raw_tab = "<h3>ChiC reads w/wo GFP support</h3>" + raw_ChiC.to_html(index = False,border=0, table_id = "chic")
+    ChiC_failed_GFP_tab = "<h3>ChiC failed GFP filter</h3>" + ChiC_failed_GFP.to_html(index = False,border=0, table_id = "chic_failed")
+    # ChiC_raw_GFP0 = 
+    ChiC_raw_summary  = "<h3>ChiC reads w/wo GFP summary</h3>" + raw_ChiC_sum.to_html(index = False, border=0)
     # Build contents html (label content)
     contents_html = f"""
     <div id="tab1" class="tabcontent">
     {gfp_summary}
     {gfp_gene_summary}
+    {gfp_plot}
     {chic_summary}
     {img_summary}
     {chic_img_stat_html}
@@ -135,8 +161,10 @@ def main():
     <br><br></div>
     <div id="tab2" class="tabcontent">{download_gfp}{gfp_sublibrary_summary_df.to_html(index = False,border=0, table_id = "gfp")}</div>
     <div id="tab3" class="tabcontent">{download_gene}{gfp_tag_gene_df.to_html(index = False,border=0, table_id = "gene")}</div>
-    <div id="tab4" class="tabcontent">{gene_freq.to_html(index = False,border=0, table_id = "freq")}</div>
-    <div id="tab5" class="tabcontent">{GFP_ChiC_df.to_html(index = False, border = 0, table_id="combined")}</div>
+    <div id="tab4" class="tabcontent">{ChiC_raw_summary}{ChiC_raw_tab}{ChiC_failed_GFP_tab}</div>
+    <div id="tab5" class="tabcontent">{gene_freq.to_html(index = False,border=0, table_id = "freq")}</div>
+    <div id="tab6" class="tabcontent">{GFP_ChiC_df.to_html(index = False, border = 0, table_id="combined")}</div>
+    <div id="tab7" class="tabcontent">{s_group.to_html(index = False, border = 0, table_id="group")}</div>
     """
     # html template 
     html_template = f"""
@@ -228,13 +256,26 @@ def main():
         }}
     }}
     if (tabName === 'tab4') {{
+        if (!$.fn.DataTable.isDataTable('#chic')) {{
+        $('#chic').DataTable();
+        }}
+        if (!$.fn.DataTable.isDataTable('#chic_failed')) {{
+        $('#chic_failed').DataTable();
+    }}
+    }}
+    if (tabName === 'tab5') {{
         if (!$.fn.DataTable.isDataTable('#freq')) {{
         $('#freq').DataTable();
         }}
     }}
-    if (tabName === 'tab5') {{
+    if (tabName === 'tab6') {{
         if (!$.fn.DataTable.isDataTable('#combined')) {{
         $('#combined').DataTable();
+        }}
+    }}
+    if (tabName === 'tab7') {{
+        if (!$.fn.DataTable.isDataTable('#group')) {{
+        $('#group').DataTable();
         }}
     }}
     }}

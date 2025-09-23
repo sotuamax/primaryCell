@@ -85,13 +85,21 @@ To compare among samples, consistent peaks based on all input peaks are generate
     - updated "peak_consensus.py" for peaks that overlapping each other within min_dist, then clustered. 
     - Use: `peak_consensus.py -peaks sample1.narrowPeak sample2.narrowPeak sample3.narrowPeak -min_dist 500 -o HiTrAC_consensens_peak`
     - update on 03/12/2025, bin-based clustering (when peaks overlapping the same bin at resolution 1 kb, peaks merged, no summits considered). To maximize the resolution power in peak interaction call. 
-    - See `HiTrAC_cluster.bed`. 
+    - See `HiTrAC_cluster.bed`
+
 
 - Annotation peaks 
     - Use [homer](http://homer.ucsd.edu/homer/ngs/annotation.html) to annotate peaks directly.  
       - although I have wrote a script to do so, it is quite slow.  
     - Use: `annotatePeaks.pl $bed $genome -cpu 4 -annStats annotate.stat > bed_annotated`  
 
+- disease vs. normal DHS 
+  - see analysis/disease; 
+  - comparison between fLF vs. nLF; 
+  - generated consensus DHS peaks: `peak_consensus.py -peaks *narrowPeak -min_dist 100 -o nfLF -saf` ; 
+  - perform featureCount: `featureCounts -F SAF -p --countReadPairs -B -T 21 --donotsort -a $saf -o disease.featureCount -s 0 *bam`
+  - normalization and differential analysis: see `diff_analysis.Rmd`
+  - test for TF enrichment: `TF_enrich.py -bg nfLF.bed -query diff_nfLF.bed -TF /data/jim4/Seq/primary_cell_project/data/motif/motif_from_hg19/*bed -o diff_nfLF_TF_overlap`
 
 #### Loops 
 - minimum counts at 5 is reliable, and minimum dist > 5000 should be applied. 
@@ -162,6 +170,17 @@ To compare among samples, consistent peaks based on all input peaks are generate
 
 8. public loop/domain data 
    - https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE63525 (Rao, 2014)
+
+
+9. published Hi-TrAC data contains "XX" in pairs file 
+  - I need to figure out how could "XX" present in pairs files (for example, K562);
+  - for K562.n.bam, 442622878 total reads (222825581 + 0 read1, 219797297 + 0 read2); 
+  - for K562.bam, 442622878 reads in total (read number no change between formats);
+  - filter K562.n.bam, make it clean file K562.nn.bam; 
+  - for K562.nn.bam, 348815682 total reads (174407841 PETs);
+  - for K562.pairs, 174407841 UU PETs (match to clean BAM file); 
+  - although I cannot understand why "XX" in pairs file, but all valid reads are retained in pairs file; 
+
 
 #### Expression
 

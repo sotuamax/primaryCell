@@ -30,13 +30,15 @@ def args_parser():
     parser.add_argument("-primer", "--primer_seq", required = False, help = "primer sequence to be used for read filtering")
     # parser.add_argument("-regex", action = "store_true", help = "primer sequence provided in regular expression pattern.")
     parser.add_argument("-barcode", "--barcode", required = False, help = "cell barcode table used to filter and group on read")
+    parser.add_argument("-p", "--prefix", action = "store_true", help = "if sample as prefix name (to add [0-9][0-9] for searching its R1/R2)")
     args=parser.parse_args()
     return args
 
 def main():
     from mpi4py import MPI
     from mpi4py.util import pkl5
-    comm = pkl5.Intracomm(MPI.COMM_WORLD) # to overcome the overflow error when comm data > 2 GB
+    comm = pkl5.Intracomm(MPI.COMM_WORLD) 
+    # to overcome the overflow error when comm data > 2 GB
     rank = comm.Get_rank()
     size = comm.Get_size()
     args = args_parser()
@@ -50,8 +52,12 @@ def main():
     sample = args.sample
     log_file = os.path.join(output_dir, sample +".log")
     rdir = args.directory
-    r1_list = sorted(glob.glob(os.path.join(rdir, sample + "[0-9][0-9]_R1.fastq.gz")))
-    r2_list = sorted(glob.glob(os.path.join(rdir, sample + "[0-9][0-9]_R2.fastq.gz")))
+    if not args.prefix:
+        r1_list = sorted(glob.glob(os.path.join(rdir, sample + "_R1.fastq.gz")))
+        r2_list = sorted(glob.glob(os.path.join(rdir, sample + "_R2.fastq.gz")))
+    else:
+        r1_list = sorted(glob.glob(os.path.join(rdir, sample + "[0-9][0-9]_R1.fastq.gz")))
+        r2_list = sorted(glob.glob(os.path.join(rdir, sample + "[0-9][0-9]_R2.fastq.gz")))
     if [r.split("_R1")[0] for r in r1_list] != [r.split("_R2")[0] for r in r2_list]:
         raise IOError("Cannot correctly locate paired R1/R2!")
     from utilities.fastq_tools import fq2df, read_len, read_select, write_read
@@ -152,7 +158,7 @@ def main():
             r2_select_df["comment"] = r2_select_df["comment"].astype(str) + "+" + r2_select_df["barcode"].astype(str)
             r1_select_df.drop("barcode", axis = 1, inplace = True); r2_select_df.drop("barcode", axis = 1, inplace = True)
         else:
-            r2_df = fq2df(r2)
+            r2_df = fq2df(r2, quality = True)
             r2_select_df = r2_df[r2_df["name"].isin(r1_select_df["name"])].copy()
         del r2_df
         # pre_fw.write(f"{round(len(r1_select_df)/total_read*100)}\n")
@@ -173,6 +179,11 @@ def main():
         joint_r2 = " ".join(all_r2)
         subprocess.call(f"cat {joint_r1} > {os.path.join(output_dir, sample)}_R1.fastq.gz", shell = True)
         subprocess.call(f"cat {joint_r2} > {os.path.join(output_dir, sample)}_R2.fastq.gz", shell = True)
+        if os.path.exists(os.path.join(output_dir, sample + "_R1.fastq.gz")) and os.path.exists(os.path.join(output_dir, sample + "_R2.fastq.gz")):
+            for rr1 in all_r1:
+                os.remove(rr1)
+            for rr2 in all_r2:
+                os.remove(rr2)
         print(f"Combined R1/R2 from {len(r1_list)} libraries.")
         pre_fw.close()
 

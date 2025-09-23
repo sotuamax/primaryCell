@@ -46,8 +46,7 @@ def main():
     with pysam.AlignmentFile(new_bam, "wb", text = header, threads = n) as newbam:
         for read in bam_handle.fetch():
             try:
-                read_tmp = read.query_name.split(":")[-1]
-                read.set_tag("RG", barcode_gene_dict[read_tmp], value_type = "Z")
+                read.set_tag("RG", barcode_gene_dict[read.query_name.split(":")[-1]], value_type = "Z")
                 newbam.write(read)
             except:
                 pass

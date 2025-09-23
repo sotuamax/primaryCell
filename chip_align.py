@@ -16,7 +16,7 @@ def args_parser():
     sub_parsers = parser2.add_subparsers(dest = 'command', help = "mode to run")
     # alignment
     align = sub_parsers.add_parser("align", help = "perform alignment", parents = [parser], add_help = False)
-    align.add_argument("-read", "--read", help="prefix of read file")
+    align.add_argument("-read", "--read", nargs = "+", help="prefix of read file")
     align.add_argument("-ref", "--reference", default = "/data/jim4/Reference/human/GRCh38.p14/fasta/GRCh38.primary_assembly.genome.fa", help = "reference genome for alignment")
     align.add_argument("-mode", "--mode", choices= ["SE", "PE"], help = "Single-end or Pair-end alignment.", default = "SE")
     align.add_argument("-outdir", "--outdir", default = "/data/jim4/Seq/CRISPR/alignment/individual", help = "output directory for raw bam alignment file")
@@ -49,12 +49,13 @@ def main():
     if args.command == "align":
         ref = args.reference
         read = args.read 
-        r1 = glob.glob(f"{read}_*R1.fastq.gz")[0]; r2 = glob.glob(f"{read}_*R2.fastq.gz")[0]
-        name = os.path.join(args.outdir, os.path.basename(read))
+        r1 = " ".join(read)
+        # r1 = glob.glob(f"{read}_*R1.fastq.gz")[0]; r2 = glob.glob(f"{read}_*R2.fastq.gz")[0]
+        name = os.path.join(args.outdir, os.path.basename(read[0]).split(".fastq")[0])
         if args.mode == "SE":
             align_command = f"bwa mem {ref} {r1} -t {n} | samtools view -@ {n} -Su - | samtools sort -@ {n} - -o {name}.bam && samtools index -@ {n} {name}.bam"
         if args.mode == "PE":
-            align_command = f"bwa mem {ref} {r1} {r2} -t {n} | samtools view -@ {n} -Su - | samtools sort -@ {n} - -o {name}.bam && samtools index -@ {n} {name}.bam"
+            align_command = f"bwa mem {ref} {r1} -t {n} | samtools view -@ {n} -Su - | samtools sort -@ {n} - -o {name}.bam && samtools index -@ {n} {name}.bam"
         if not os.path.exists(name + ".bam"):
             print("Perform alignment ...")
             subprocess.call(align_command, shell = True)
@@ -88,10 +89,9 @@ def main():
         name = os.path.join(outdir, os.path.basename(bam).replace(".bam", ".qc.bam"))
         if not os.path.exists(name) or args.force:
             print("QC on BAM ...")
-            bamfilter(bam, name, clip_check=True, threads = n, chrom = True)
+            bamfilter(bam, name, clip_check=False, threads = n, chrom = True)
         else:
             print("QC BAM exists.")
-
     if args.command == "bigwig":
         bam = args.bam
         name = os.path.join(args.outdir, os.path.basename(bam).replace(".bam", ".default.bw"))

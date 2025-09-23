@@ -17,6 +17,9 @@ derivative: 3 bins on each side -> as an argument (-dv, default : 3)
 minima: the score is minima in surrounding 5 bin on each side -> as an argument (-vs, default : 10); minma screen should examine regions beyond the shifting site (-1, +1)
 surrounding region should be at least >fd times of the local minima; 
 
+the final output in bedGraph format: 
+score represents the foldchange between the valley point and its surrounding region's local maxima contact frequencies.
+
 """
 
 # import cooler 
@@ -147,6 +150,8 @@ def main():
             print("Process window: ", f"{win}x{win}")
             print("Collecting all insulation score ...")
             pixel_all_df = pd.concat(pixel_all, axis = 0)
+            for win in win_list:
+                pixel_all_df[["chrom", "start", "end", f"score_{win}"]].to_csv(f"{out}_{win}.contact.bedGraph", sep = "\t", header = False, index = False)
             # pixel_all_df = pixel_all_df[pixel_all_df[f"size_{win}"] > win].copy()
             c_new_list = list()
             for row in ref_arm.itertuples():
@@ -194,7 +199,7 @@ def main():
                 pass
         col = [c for c in all_win.columns if c.startswith("valley")]
         select_win = all_win[(all_win[col] == 1).mean(axis = 1) == 1].copy()
-        print("Generating boundary bedGraph file (foldchange as )...")
+        print("Generating boundary bedGraph file (foldchange as score value)...")
         for win in win_list:
             select_win[f"fc_{win}"] = np.where(select_win[f"upfc_{win}"] > select_win[f"downfc_{win}"], select_win[f"upfc_{win}"], select_win[f"downfc_{win}"])
             select_win[f"strand_{win}"] = np.where((select_win[f"upfc_{win}"] > select_win[f"downfc_{win}"]) & (select_win[f"downfc_{win}"] < fc), "+", np.where((select_win[f"upfc_{win}"] < select_win[f"downfc_{win}"]) & (select_win[f"upfc_{win}"] < fc), "-", "."))

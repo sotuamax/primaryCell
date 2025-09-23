@@ -27,7 +27,7 @@ def args_parser():
     parser.add_argument("bed", help = "bed file (for intervals to examine)")
     parser.add_argument("bw", help = "provide scores on genomic position in bigwig format")
     parser.add_argument("-scale", choices = ["mm", "bg"], required = False, help = "methods used to scale score ")
-    parser.add_argument("-flank", "--flank", default = 1000, type = int, help = "flanking side size centered at bed region pospoint (default: 1000)")
+    parser.add_argument("-flank", "--flank", default = 5000, type = int, help = "flanking side size centered at bed region pospoint (default: 1000)")
     #parser.add_argument("-filter", "--filter", action = "store_true", help = "when assigned, filter bed input for chromosome")
     parser.add_argument('-blacklist', "--blacklist", required = False, help = "blacklist region used to filtering on bed file")
     parser.add_argument("-step", "--step", default = 50, type = int, help = "sample step size within the 2xflanking region")
@@ -50,7 +50,6 @@ def scale_mm(mtx):
 def scale_bg(mtx):
     """"
     Scale score based on background signal (that calculated from all intervals side ends)
-
     For normalization idea, borrow from: 
     https://github.com/ENCODE-DCC/atac-seq-pipeline/blob/master/src/encode_task_tss_enrich.py 
     """
@@ -80,7 +79,7 @@ def main():
         blacklist_df = bf.read_table(args.blacklist, schema = "bed3")
         from utilities.peak_tools import rmblacklist
         bed_df = rmblacklist(bed_df, blacklist_df)
-    bed_df.to_csv(bed.replace(".bed", ".tmp.bed"), sep = "\t", header = False, index = False)
+    # bed_df.to_csv(bed.replace(".bed", ".tmp.bed"), sep = "\t", header = False, index = False)
     import pyBigWig
     score_handle = pyBigWig.open(bw)
     if score_handle.isBigWig():
@@ -116,8 +115,8 @@ def main():
         center_score = score_filtered[:, score_filtered.shape[-1]//2].mean()
         enrich_value = center_score/bg_score
         print(f"Enrichment score: {enrich_value}")
-        with open(output+".stat", "w") as fw:
-            fw.write(f"enrich\t{score_filtered.shape[0]}\t{enrich_value}\n")
+        # with open(output+".stat", "w") as fw:
+        #     fw.write(f"enrich\t{score_filtered.shape[0]}\t{enrich_value}\n")
         #print('Write scores into csv!')
         # np.savetxt(output + ".csv", score_stack, delimiter = ",")
         # score_stack = score_stack[~np.isnan(score_stack).any(axis = 1), :]

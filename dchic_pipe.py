@@ -15,11 +15,14 @@ Input:
     - ref_path: golden reference file path
 
 Tested on 05/06/2025: 
+
 source myconda 
 mamba activate dchic 
-dchic_pipe.py -cool /data/jim4/Seq/primary_cell_project/alignment/HiTrAC/pairs/nCAEC.mcool -r 10000 -ref_path/data/jim4/Seq/primary_cell_project/analysis/Compartment/data/hg38_goldenpathData/ -o test
+
+dchic_pipe.py -cool /data/jim4/Seq/primary_cell_project/alignment/HiTrAC/pairs/nCAEC.mcool -r 10000 -o test -n 8 
 
     # the goldenpathData for ref is at 10 kb resolution 
+    # memory > 60 G to secure run
 
 """
 import numpy as np 
@@ -35,7 +38,7 @@ from utilities.misc import timeit
 
 def args_parser():
     parser = argparse.ArgumentParser(prog = "PROG", formatter_class = argparse.RawDescriptionHelpFormatter, add_help=True, 
-                                     usage="\nInput as cool: \n  dchic_pipe.py -cool <input.mcool> -r 5000 -blacklist <blacklist.bed> -ref_path <goldref> -o <output>\n\nInput as tsv: \n  dchic_pipe.py -bin bin.txt pixel.txt -blacklist <blacklist.bed> -ref_path <goldref> -o <output> ")
+                                     usage="\nInput as cool: \n  dchic_pipe.py -cool <input.mcool> -r 10000 -blacklist <blacklist.bed> -ref_path <goldref> -o <output>\n\nInput as tsv: \n  dchic_pipe.py -bin bin.txt pixel.txt -blacklist <blacklist.bed> -ref_path <goldref> -o <output> ")
     group = parser.add_mutually_exclusive_group(required = True)
     group.add_argument("-cool", help = "cool input file") # either cool provided or bin provided (as exclusive parameters)
     group.add_argument("-bin_pixel", nargs = 2, help = "chromosome bin and pixel file")
@@ -43,9 +46,9 @@ def args_parser():
     parser.add_argument("-r", "--resolution", type = int, help = "resolution to use", required = False)
     parser.add_argument("-blacklist", "--blacklist", help = "blacklist in bed format", required = False)
     parser.add_argument("-ref", "--reference", required = False, default = "hg38", help = "reference genome")
-    parser.add_argument("-ref_path", "--ref_path", required = False, help = "the folder path for reference genome (not related to resolution)")
+    parser.add_argument("-ref_path", "--ref_path", required = False, help = "the folder path for reference genome (not related to resolution)", default = "/data/jim4/Seq/primary_cell_project/analysis/Compartment/data/hg38_goldenpathData")
     # parser.add_argument("-subcomp", "--subcompartment", action = "store_true", help = "when assigned, perform subcompartment run")
-    parser.add_argument("-n", "--threads", type = int, default = 1, help = "threads to use ")
+    parser.add_argument("-n", "--threads", type = int, default = 1, help = "threads number ")
     parser.add_argument("-o", "--output", help = "output file prefix name")
     args = parser.parse_args()
     return args
@@ -170,7 +173,7 @@ def main():
                 print("After normalization (z-score), sign changed. ")
                 print("Correcting sign ...")
                 pc_all["z"] = np.where(np.equal(np.sign(pc_all["z"]), np.sign(pc_all["value"])), pc_all["z"], -(pc_all["z"]))
-                
+            pc_all.to_csv(f"{out}_{resolution}.bedGraph", sep = "\t", header = False, index = False)
         else:
             print("pc select bedGraph file cannot be identified.")
 
