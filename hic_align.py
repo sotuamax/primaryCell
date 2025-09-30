@@ -173,6 +173,7 @@ def main():
         # logging.info("#### Mark duplicates .....")
         # logging.info(f"Duplicate rate\t{dup_rate}")
     if args.command == "qc": # no log file 
+        print("Perform QC ...")
         # QC: mapping quality, flag 2316, chromosome read
         bam = args.bam 
         qcdir = args.outdir 
@@ -197,7 +198,7 @@ def main():
             hg38_TSS = "/data/jim4/Reference/human/GRCh38.p14/GRCh38_TSS.bed"
             # bw = f"/data/jim4/Seq/primary_cell_project/alignment/HiTrAC/QC/individual/{id}.bw"
             enrich_score = bw.replace(".bw", "")
-            bw_enrich_command = f"bed_profile.py {hg38_TSS} {bw} -o {enrich_score}"
+            bw_enrich_command = f"bed_profile.py -flank 1000 {hg38_TSS} {bw} -o {enrich_score}"
             subprocess.call(bw_enrich_command, shell=True)
         if os.path.exists(name) and os.path.exists(bw) and os.path.exists(enrich_log):
             exit(0)
@@ -210,14 +211,11 @@ def main():
         if os.path.exists(name.replace(".bam", ".json")):
             exit(0)
         from utilities.bam_tools import examine_sort
+        bed = name.replace(".bam", ".bedpe")
         if examine_sort(bam) == "coordinate" and not os.path.exists(name):
-            sort_command = f"samtools sort -@ {n} -n -o {name} {bam}"
+            sort_command = f"samtools sort -@ {n} -n {bam} | bedtools bamtobed -bedpe -i stdin > {bed}"
             print(sort_command)
             subprocess.call(sort_command, shell = True)
-        bed = name.replace(".bam", ".bedpe")
-        if examine_sort(name) == "queryname" and not os.path.exists(bed):
-            from utilities.bam_tools import bam2bedpe
-            bam2bedpe(name, bed)
             # get a small set of data and guess the column info
         qc_json = name.replace(".bam", ".json")
         ## report cis/trans yield 

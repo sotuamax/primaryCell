@@ -50,8 +50,12 @@ def format_excel(out, sample_report):
     import string
     letters = list(string.ascii_uppercase)
     # 
-    col_list = sample_report.columns.tolist()
     yield_col = [col for col in sample_report.columns if col.endswith("yield")]
+    cis_yield_col = [c for c in sample_report.columns if "cis_yield" in c][0]
+    cis_valid_yield_col = [c for c in sample_report.columns if "cis_valid_yield" in c][0]
+    sample_report.rename(columns = {cis_yield_col:"cis_yield", cis_valid_yield_col:"cis_valid_yield"}, inplace = True)
+    col_list = sample_report.columns.tolist()
+    # print(sample_report)
     with pd.ExcelWriter(out, mode = "w") as writer:
         sample_report.to_excel(writer, index = False, sheet_name = "Sheet1")
         workbook = writer.book 
@@ -99,7 +103,8 @@ def main():
                 jlist.append(jdf)
         sample_report = pd.concat(jlist, axis = 1).transpose()
         sample_report = pd.merge(sample_df, sample_report, left_on = "id", right_on = "ID").drop("ID", axis = 1)
-        sample_report["final_yield(%)"] = (sample_report["cis"]-sample_report['short_distance'])/sample_report["total_reads"]*100
+        short_col = [c for c in sample_report.columns if "short_distance" in c][0]
+        sample_report["final_yield(long_distance_PETs/total_reads)"] = (sample_report["cis"]-sample_report[short_col])/sample_report["total_reads"]*100
         out = args.sample.replace(".xlsx", "_report.xlsx")
         format_excel(out, sample_report)
     if args.mode == "process":
@@ -144,7 +149,7 @@ def main():
             if not os.path.exists(mark_bam):
                 print(mark_step)
                 subprocess.call(mark_step, shell = True)
-            if not os.path.exists(qc_bam):
+            if not os.path.exists(qc_bam) or not os.path.exists(qc_bam.replace(".bam", ".stat")):
                 print(qc_step)
                 subprocess.call(qc_step, shell = True)
             subprocess.call(name_sort, shell = True)

@@ -85,7 +85,8 @@ def main():
     if score_handle.isBigWig():
         #score_list = list()
         print("Collecting scores at bed surrounding region ...")
-        score_list = [np.array([score_handle.stats(row.chrom, i, i+50)[0] for i in range((row.start+row.end)//2-flank, (row.start+row.end)//2+flank+1, step)]) for row in bed_df.itertuples()]
+        if not os.path.exists(output + ".mtx"):
+            score_list = [np.array([score_handle.stats(row.chrom, i, i+50)[0] for i in range((row.start+row.end)//2-flank, (row.start+row.end)//2+flank+1, step)]) for row in bed_df.itertuples()]
         # for i in range(-flank, flank, step):
         #     if i == 0:
         #         score_array = np.array([score_handle.stats(row.chrom, row.start, row.end) for row in bed_df.itertuples()]).astype(float)
@@ -95,11 +96,13 @@ def main():
         #         score_array = np.array([score_handle.stats(row.chrom, row.end+i, row.end+i+step) for row in bed_df.itertuples()]).astype(float)
             #score_list.append(score_array)
         # score_list contains for each list as a relative position of all bed intervals (e.g., all values at 1000 bp downstream of bed intervals)
-        print("All positions collected!")
-        score_stack = np.vstack(score_list) # stack in vertical format (relative position on each row)
-        if score_stack.shape[0] != len(bed_df):
-            raise ValueError("score dimension is not match to bed file")
-        np.savetxt(output + ".mtx", score_stack, delimiter = "\t", fmt = "%d")
+            print("All positions collected!")
+            score_stack = np.vstack(score_list) # stack in vertical format (relative position on each row)
+            if score_stack.shape[0] != len(bed_df):
+                raise ValueError("score dimension is not match to bed file")
+            np.savetxt(output + ".mtx", score_stack, delimiter = "\t", fmt = "%d")
+        else:
+            score_stack = np.loadtxt(output+".mtx", delimiter = "\t")
         # filter score, bed row score w/ all zeros removed
         score_filtered = score_stack[~np.all(score_stack <= min_cnt, axis = 1)]
         if args.scale == "mm":
@@ -109,14 +112,16 @@ def main():
             print("Perform background sclae on signal ...")
             score_filtered = scale_bg(score_filtered)
         score_mean = pd.DataFrame(score_filtered.mean(axis = 0), columns = ["signal"])
-        score_mean["pos"] = range(-flank, flank+1, step)
+        signal_arr = np.array(score_mean["signal"])
+        score_mean["pos"] = range(-len(signal_arr)//2*step, len(signal_arr)//2*step, step)
         score_mean[['pos', "signal"]].to_csv(output + "_mean.txt", sep = "\t", header = True, index = False)
-        bg_score = (score_filtered[:, 0:10].mean() + score_filtered[:, -10:-1].mean())/2
-        center_score = score_filtered[:, score_filtered.shape[-1]//2].mean()
-        enrich_value = center_score/bg_score
-        print(f"Enrichment score: {enrich_value}")
-        # with open(output+".stat", "w") as fw:
-        #     fw.write(f"enrich\t{score_filtered.shape[0]}\t{enrich_value}\n")
+        # bg_score = (score_filtered[:, 0:10].mean() + score_filtered[:, -10:-1].mean())/2
+        # center_score = score_filtered[:, score_filtered.shape[-1]//2].mean()
+        #enrich_value = center_score/bg_score
+        #print(f"Enrichment score: {enrich_value}")
+        with open(output+".stat", "w") as fw:
+            enrich_value = signal_arr[len(signal_arr)//2-1:len(signal_arr)//2+1].mean()/((signal_arr[:5].mean() + signal_arr[-5:].mean())/2)
+            fw.write(f"enrich\t{score_filtered.shape[0]}\t{enrich_value}\n")
         #print('Write scores into csv!')
         # np.savetxt(output + ".csv", score_stack, delimiter = ",")
         # score_stack = score_stack[~np.isnan(score_stack).any(axis = 1), :]

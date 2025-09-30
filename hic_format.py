@@ -16,7 +16,8 @@ Example:
 source myconda 
 mamba activate bio 
 ml pairtools juicer
-hic_format.py -n 12 -o <sample> <sample>.bam
+
+hic_format.py -n 12 -o <sample> inputfile 
 
 """
 # import cooler 
@@ -31,9 +32,10 @@ from utilities.misc import timeit
 
 def args_parser():
     '''parser the argument from terminal command'''
-    parser = argparse.ArgumentParser(prog = "PROG", formatter_class = argparse.RawDescriptionHelpFormatter, add_help = True, usage="hic_format.py -o <out> input.bam ")
+    parser = argparse.ArgumentParser(prog = "PROG", formatter_class = argparse.RawDescriptionHelpFormatter, add_help = True, 
+                                     usage="hic_format.py -o <out> inputfile -n 10")
     parser.add_argument("input", help = "input file (either BAM file coordinate or name sorted, provide name sorted file to save time; or pairs file sorted and compressed for UU reads)")
-    parser.add_argument("-of", "--output_format", help = "output file format", choices = ["pairs", "cool", "hic"])
+    parser.add_argument("-of", "--output_format", help = "output file format (output cool is not multiple-threaded)", choices = ["pairs", "cool", "hic"])
     parser.add_argument("-o", "--output", required = True, help = "output file name (prefix)")
     parser.add_argument("-n", "--thread", default = 2, type = int, help = "thread to process bam")
     parser.add_argument("-chrsize", "--chrsize", required = False, default = "/data/jim4/Reference/human/GRCh38.p14/GRCh38_chrsize.bed", help = "file for ordered chromosome and size")
@@ -61,9 +63,9 @@ def main():
             print(e)
             exit(1)
         if b_sort == "coordinate":
-            pair_command = f"samtools sort -@ {n} -n {bam} | pairtools parse -c {chrsize} --assembly {assembly} --nproc-in {n} --nproc-out {n} --drop-sam | pairtools select --nproc-in {n} --nproc-out {n} '(pair_type==\"UU\")' | pairtools sort --nproc-in {n} --nproc-out {n} -o {out}.pairs.gz"
+            pair_command = f"samtools sort -@ {n} -n {bam} | pairtools parse -c {chrsize} --assembly {assembly} --nproc-in {n} --nproc-out {n} --drop-sam | pairtools select --nproc-in {n} --nproc-out {n} '(pair_type==\"UU\")' | pairtools sort --nproc-in {n} --nproc-out {n} -o {out}.pairs.gz && pairix -p pairs {out}.pairs.gz"
         if b_sort == "name":
-            pair_command = f"pairtools parse {bam} -c {chrsize} --assembly {assembly} --nproc-in {n} --nproc-out {n} --drop-sam | pairtools select --nproc-in {n} --nproc-out {n} '(pair_type==\"UU\")' | pairtools sort --nproc-in {n} --nproc-out {n} -o {out}.pairs.gz"
+            pair_command = f"pairtools parse {bam} -c {chrsize} --assembly {assembly} --nproc-in {n} --nproc-out {n} --drop-sam | pairtools select --nproc-in {n} --nproc-out {n} '(pair_type==\"UU\")' | pairtools sort --nproc-in {n} --nproc-out {n} -o {out}.pairs.gz && pairix -p pairs {out}.pairs.gz"
         if not os.path.exists(out + ".pairs.gz"):
             # use standard pairtools to generate pairs file 
             print("Generate pairs ...")

@@ -45,11 +45,13 @@ def args_parser():
     # in the mode of dectection, input peak file to generated paired peaks and report significant interactions
     sub_parsers = parser2.add_subparsers(dest = "command", help = "subcommand to run")
     discovery = sub_parsers.add_parser("detect", help = "identify significant interactions", add_help = False, parents = [parser]) 
-    discovery.add_argument("-peak", "--peak", help = "peak file in narrowPeak or bed format.")
+    discovery.add_argument("-peak", "--peak", help = "peak file in narrowPeak or bed format." \
+    "Note: peaks used as loop anchors have to be pre-processed to make sure no multiple peaks at the same bin region.")
     discovery.add_argument("-screen_0s", "--screen_0s", default = 50, type = int, help = "number of 0s encountered before give up (default: 50)")
     discovery.add_argument("-w", "--window", type = int, nargs = "+", help = "number of windows (resolution is per window size) used for expected value calculation on local scale")
-    discovery.add_argument("-min_contact", "--min_contact", default = 8, type = int, help = "minimum contacts for each pair combination")
+    discovery.add_argument("-min_contact", "--min_contact", default = 5, type = int, help = "minimum contacts for each pair combination")
     discovery.add_argument("-fdr", "--fdr", default = 0.05, type = float, help = "false discovery rate (FDR) used for BH multiple testing correction (default: 0.05)")
+    discovery.add_argument("-min_dist", "--min_distance", default = 0, type = int, help = "minimum distance for the identified loop interactions")
     # in the mode of count, perform read count at the queried interaction site
     count = sub_parsers.add_parser("count", help = "read count at the interaction site", add_help = False, parents = [parser])
     count.add_argument("-interaction", "--interaction", required = False, help = "paired anchors in bedpe format (minimum columns: chrom1, start1, end1, chrom2, start2, end2), no header")
@@ -175,6 +177,7 @@ def main():
             all_chrom = sorted(set(ref_arm["chrom"]))
             print(datetime.now().strftime("%H:%M:%S") + " - Collect peaks ...")
             peak_df = peak_parse(peak, chrom = all_chrom)
+            #print(peak_df)
             all_chrom = sorted(set(peak_df["chrom"]))
             ref_arm = ref_arm.query("chrom in @all_chrom").copy()
             ref_arm.index = range(len(ref_arm))
@@ -185,7 +188,8 @@ def main():
             peak_df = None 
         ref_arm = comm.bcast(ref_arm, root = 0)
         peak_df = comm.bcast(peak_df, root = 0)
-        assert len(peak_df) > 0, 'No peak detected.'
+        
+        assert len(peak_df) > 0, 'No peaks detected.'
         # split the job by chromosome arms
         if rank == 0:
             w_idx = 0
@@ -193,6 +197,7 @@ def main():
             for region in ref_arm:
                 worker_tasks1[w_idx].append(region)
                 w_idx = (w_idx + 1) % size
+            print("Distribute chromosome to each core ...")
         else:
             worker_tasks1 = None
         worker_tasks1 = comm.bcast(worker_tasks1, root = 0)
@@ -265,6 +270,9 @@ def main():
             obs_exp_peak = bin2peak(obs_exp_enrich, peak_df, resolution)
             obs_exp_peak.to_csv(output + "_padj_sig.txt", sep = "\t", header = True, index = False, float_format='%.2f')
             longrange(obs_exp_peak).to_csv(output + ".longrange", sep = "\t", index = False, header = False)
+            if args.min_distance > 0:
+                obs_exp_peak_dist = obs_exp_peak[obs_exp_peak["end2"] - obs_exp_peak["start1"] > args.min_distance]
+                obs_exp_peak_dist.to_csv(output + f"_padj_sig_{args.min_distance}.txt", sep = "\t", header = True, index = False, float_format='%.2f')
         print(timeit(start), f"on core {rank}")
         exit(0)
     if args.command == "count":

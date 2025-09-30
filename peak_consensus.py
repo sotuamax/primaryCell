@@ -115,15 +115,16 @@ def main():
     # clustered_df.query("n == 1")
     # for row in .iterrows():
     # for peaks with > 1 summits, renew its peak intervals
-    print("Update peaks with more than 1 summits (split peaks based on summit) ...")
+    print("Update peaks with more than 1 summits (split peaks based on summit ...")
+    print("Separate by 50 bp ...")
     multi_summit = clustered_df.query("n != 1").copy().sort_values(by = ["chrom", "start", "end", "summit"])
     new_c_df = list()
     for c,c_df in multi_summit.groupby(["chrom", "start", "end"], as_index = False):
         summit_list = c_df["summit"].tolist()
         for s in range(len(summit_list)-1):
             summit_mid = int(np.mean(summit_list[s:s+2]))
-            c_df.iat[s, 2] = summit_mid - 20 
-            c_df.iat[s+1, 1] = summit_mid + 20
+            c_df.iat[s, 2] = summit_mid - 25 
+            c_df.iat[s+1, 1] = summit_mid + 25 # separated by 40 bp distance 
         new_c_df.append(c_df)
     multi_summit_new = pd.concat(new_c_df, axis = 0)
     clustered_df_new = pd.concat([clustered_df.query("n == 1"), multi_summit_new], axis = 0)

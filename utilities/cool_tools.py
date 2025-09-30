@@ -100,17 +100,20 @@ def obs_interaction(clr_matrix, peak_df, offset:int, chrom:str, bin1_pos:int, bi
     #for bpv in bin2:
         #b = bpv-offset
         #if abs(a-b) < 10:
-        bp_obs = clr_matrix[a[0]-offset:a[-1]-offset, bpv[0]-offset:bpv[-1]-offset].max() # in python, it's always left close, right open (exclusive)
-        #else: # matrix slicing: matrix[row_start:row_end, col_start:col_end]
-        #bp_obs = clr_matrix[a-1:a+2, b-1:b+2].max()
-        if bp_obs > 0: 
-            bp_list.append((bpv[0], bpv[-1], bp_obs))
-        if bp_obs == 0:
-            bp_0_cutoff += 1
-        if bp_obs != 0:
-            bp_0_cutoff = 0
-        if bp_0_cutoff >= stop_sign_of_0:
-            break
+        try:
+            bp_obs = clr_matrix[a[0]-offset:a[-1]-offset, bpv[0]-offset:bpv[-1]-offset].max() # in python, it's always left close, right open (exclusive)
+            #else: # matrix slicing: matrix[row_start:row_end, col_start:col_end]
+            #bp_obs = clr_matrix[a-1:a+2, b-1:b+2].max()
+            if bp_obs > 0: 
+                bp_list.append((bpv[0], bpv[-1], bp_obs))
+            if bp_obs == 0:
+                bp_0_cutoff += 1
+            if bp_obs != 0:
+                bp_0_cutoff = 0
+            if bp_0_cutoff >= stop_sign_of_0:
+                break
+        except:
+            pass
     bp_df = pd.DataFrame(bp_list, columns = ["start2", "end2", "obs"]); bp_df["start1"] = a[0];bp_df["end1"] = a[-1]; bp_df["chrom1"] = chrom;bp_df["chrom2"] = chrom
     return bp_df[["chrom1", "start1", "end1", "chrom2", "start2", "end2", "obs"]]
 

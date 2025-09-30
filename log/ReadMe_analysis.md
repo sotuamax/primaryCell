@@ -82,10 +82,18 @@ To compare among samples, consistent peaks based on all input peaks are generate
         - currently, top 5 k peaks are applied; 
 
 - Consensus Hi-TrAC peakcall
+    - about consensus:
     - updated "peak_consensus.py" for peaks that overlapping each other within min_dist, then clustered. 
-    - Use: `peak_consensus.py -peaks sample1.narrowPeak sample2.narrowPeak sample3.narrowPeak -min_dist 500 -o HiTrAC_consensens_peak`
+    - Use example: `peak_consensus.py -peaks sample1.narrowPeak sample2.narrowPeak sample3.narrowPeak -min_dist 500 -o HiTrAC_consensens_peak -blacklist $hg38_blacklist -min_fc 2 -min_score 150`
+    - Hi-TrAC peak call: shiftsize and expand size 400 bp can help control on noises. 
+    - update on 09/30/2025: use min_dist 200 for summit clustering (**with number of samples increasing, the distance used for clustering can be reduced** as more samples have denser summits used for clustering);
+    - min_dist for clustering is less critical as downstream analysis for loop call would bin any peaks on its best resolution at 1 kb; 
+  - about bin:
     - update on 03/12/2025, bin-based clustering (when peaks overlapping the same bin at resolution 1 kb, peaks merged, no summits considered). To maximize the resolution power in peak interaction call. 
-    - See `HiTrAC_cluster.bed`
+    - See `HiTrAC_cluster_bin.bed`
+    - binned peaks w/ good resolution can be critical for loop calling (**when multiple anchors merged as one, its significant loops can also be affected**);
+    - 
+    
 
 
 - Annotation peaks 
@@ -120,7 +128,7 @@ To compare among samples, consistent peaks based on all input peaks are generate
 2. loop detection 
     - Use "HiTrAC_cluster.bed" as anchor (see "anchor_processing.py" about its clustering strategy);
       - Specifically, when anchors have overlapped bin(s) at specific resolution (1 kb), they are merged together; 
-    - Use: (in `discovery` mode)
+    - Use: (in `detect` mode)
         `mpiexec -n 12 peak_interaction.py discovery -cool sample_1k.cool -peak HiTrAC_cluster.bed -w 5 10 100 -fdr 0.01 -o HiTrAC_interaction`
 
 3. Super Interactive loci 

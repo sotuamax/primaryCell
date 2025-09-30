@@ -54,7 +54,7 @@ def peak_parse(peak:str, chrom = None):
         peak_df = bf.read_table(peak, schema = "narrowPeak")
         #peak_df["summit"] = peak_df["start"] + peak_df["relSummit"]; peak_df.drop(["relSummit", "strand", "name", "score"], axis = 1, inplace = True)
     if peak.endswith(".bed"):
-        peak_df = pd.read_table(peak, names=["chrom", "start", "end"])
+        peak_df = bf.read_table(peak, schema = "bed3")
     if chrom != None:
         peak_df = peak_df.query("chrom in @chrom").copy()
     peak_df.sort_values(["chrom", "start"], inplace = True)
@@ -63,9 +63,8 @@ def peak_parse(peak:str, chrom = None):
 
 def generate_paired_peak(peak_df:pd.DataFrame, region = None):
     """
-    Based on the bin-interactions, to assign peak interactions that overlaying bins.
-    Note: the distance between the the paired anchors should be within range (min_dist, max_dist). 
-    default: min_dist - 5000; max_dist - 10 Mb 
+    accept peak dataframe, to report any paired peak combinations in its index format. 
+    return: dictionary {index_a:range(index_b, index_n)}
     """
     if region is not None: 
         view_peak = bf.select(peak_df, region) # index maintained 

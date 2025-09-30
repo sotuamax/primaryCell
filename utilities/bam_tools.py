@@ -254,6 +254,11 @@ def bamfilter(bam, output, select_read = None, threads = 1, clip_check = False, 
                     if read.mapping_quality > 30 and (not read.is_secondary) and (not read.is_supplementary) and (not read.is_unmapped):
                         if ("S" not in read.cigarstring):
                             newbam.write(read)
+        elif not clip_check and chrom: 
+            with pysam.AlignmentFile(output, "wb", template = bam_handle, threads = threads) as newbam:
+                for read in bam_handle.fetch():
+                    if read.reference_name in ref_list and read.mapping_quality > 30 and (not read.is_secondary) and (not read.is_supplementary) and (not read.is_unmapped):
+                        newbam.write(read)
         else:
             with pysam.AlignmentFile(output, "wb", template = bam_handle, threads = threads) as newbam:
                 for read in bam_handle.fetch():

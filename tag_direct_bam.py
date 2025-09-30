@@ -5,12 +5,13 @@ import argparse
 import pysam 
 import os 
 import subprocess
+
 def args_parser():
     '''parser the argument from terminal command'''
     parser = argparse.ArgumentParser(prog = "PROG", add_help = True, formatter_class = argparse.RawDescriptionHelpFormatter)
     # important parameters 
     parser.add_argument("bam", help="bam input")
-    parser.add_argument("-flag", "--flag", help = "library barcode and its flag gene in a table, used to split BAM based on its flag gene.")
+    parser.add_argument("-flag", "--flag", help = "library barcode and its flag gene in a table, used to split BAM based on its flag gene (no header).")
     parser.add_argument("-n", "--threads", default = 1, type = int, help="threads to use to parse BAM")
     parser.add_argument("-split", "--split", action = "store_true", help = "Split BAM based on @RG")
     parser.add_argument("-bw", "--bw", action = "store_true", help = "generate matched Bigwig file on the splitted BAM file")
