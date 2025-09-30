@@ -29,8 +29,10 @@ def args_parser():
     '''parser the argument from terminal command'''
     parser=argparse.ArgumentParser(prog = "PROG", formatter_class = argparse.RawDescriptionHelpFormatter, description="")
     parser.add_argument("-peaks", "--peaks", nargs = "+", help="peaks file in narrowPeak format (contain summits)")
-    parser.add_argument("-min_dist", "--min_dist", default = 50, type = int, help = "minimum distance to be used for clustering")
-    parser.add_argument("-min_score", "-min_score", default = 0, type = int, help = "minimum score used to filter peaks. ")
+    parser.add_argument("-blacklist", "--blacklist", required = False, help = "blacklist region")
+    parser.add_argument("-chrom_only", "--chrom_only", action = "store_true", help = "chromosome only (filter out scaffolds and chrM, chrY)")
+    parser.add_argument("-min_dist", "--min_dist", default = 50, type = int, help = "minimum distance for peak summits, used for clustering")
+    parser.add_argument("-min_score", "-min_score", default = 0, type = int, help = "minimum score used to filter peaks (10xqValue). ")
     parser.add_argument("-min_fc", "--min_fc", default = 0, type = float, help = "minimum foldchange for peak signal")
     parser.add_argument("-saf", "--saf", action = "store_true", help = "output SAF format for the consensus peaks")
     parser.add_argument("-o", "--output", help = "output name")
@@ -41,16 +43,37 @@ def main():
     args = args_parser()
     peaks = args.peaks
     output= args.output
+    print("Read peaks ...")
     peak_df = pd.concat([bf.read_table(peak, schema = "narrowPeak") for peak in peaks], axis = 0)
+    print("Total peaks: ", len(peak_df))
+    # peak_df.to_csv("test.narrowPeak", header = False, index = False, sep = "\t")
+    # exit(1)
     if args.min_score > 0:
         print(f"Filtering peaks on minimum score {args.min_score}")
-        peak_df = peak_df.query("score > @args.min_score").copy()
+        peak_df = peak_df.query("score >= @args.min_score").copy()
+        print("Filtered peaks: ", len(peak_df))
     if args.min_fc > 0:
         print(f"Filtering peaks on minimum foldchange {args.min_fc}")
-        peak_df = peak_df.query("fc > @args.min_fc").copy()
-    # 
+        peak_df = peak_df.query("fc >= @args.min_fc").copy()
+        print("Filtered peaks: ", len(peak_df))
+    if args.chrom_only:
+        from utilities.chrom_func import chrom_arms
+        print("Filtering peaks on chromosome only ...")
+        chroms = sorted(set(chrom_arms()["chrom"]))
+        peak_df = peak_df.query("chrom in @chroms").copy()
+        print("Filtered peaks: ", len(peak_df))
+    # make sure peaks name are unique
+    peak_df["name"] = peak_df["name"].str.split("_peak", expand = True)[0]
+    new_peak_df = list()
+    for na, na_df in peak_df.groupby("name"):
+        na_df = na_df.sort_values(["chrom", "start"])
+        na_df["name"] = range(1, 1+len(na_df))
+        na_df["name"] = na + "_"+ na_df["name"].astype(str)
+        new_peak_df.append(na_df)
+    peak_df = pd.concat(new_peak_df, axis = 0)
+    print("Peak names are unique !")
     narrowPeak_col = peak_df.columns.tolist()
-    #  extend peaks given min dist
+    # extend peaks given min dist
     # peak_df["name"] = peak_df["name"].astype(str)
     # peak_df["summit"] = peak_df["start"] + peak_df["relSummit"]
     # peak_df["start"] = np.where(peak_df["summit"] - peak_df["start"] < args.min_dist, peak_df["summit"]-args.min_dist, peak_df["start"])
@@ -64,19 +87,23 @@ def main():
     summit_df = summit_df[["chrom", "start", "end", "name", "summit"]]
     # cluster peaks/summits based on distance cutoff (min_dist)
     from utilities.peak_tools import cluster_
+    print(f"Use min distance at {args.min_dist} bp to cluster summits ...")
     peak_cluster = cluster_(peak_df, min_dist = 3) # cluster of peak 
     summit_cluster = cluster_(summit_df, min_dist = args.min_dist) # cluster of summits
     # cluster is for peak_cluster, cluster_ is for summit_cluster
     clustered_df = pd.merge(peak_cluster, summit_cluster[["name", "summit", "cluster"]].rename(columns = {"cluster":"cluster_"}), on = "name", how = "outer")
     del peak_df, summit_df, peak_cluster, summit_cluster
     # update new summit as the midpoint of summit clusters 
+    print("For summit cluster, update new summit to the median position ...")
     clustered_df["summit"] = clustered_df.groupby(["cluster", "cluster_"])["summit"].transform("median").astype(int)
     # update peak interval to contain the range of all peaks for clustered summits (name update to refer to all the peaks source)
     clustered_df["start"] = clustered_df.groupby("cluster")["start"].transform("min").astype(int)
     clustered_df["end"] = clustered_df.groupby("cluster")["end"].transform("max").astype(int)
     clustered_df["name"] = clustered_df.groupby(["cluster", "cluster_"])["name"].transform(lambda x:",".join(x))
     # update score and fc as the mean when clustering applied 
+    print("Update score value as the mean score value of clustered peaks ...")
     clustered_df["score"] = clustered_df.groupby(["cluster", "cluster_"])["score"].transform("mean").astype(float).round(1)
+    print("Update fc value to the mean fc value of clustered peaks ...")
     clustered_df["fc"] = clustered_df.groupby(["cluster", "cluster_"])["fc"].transform("mean").astype(float).round(1)
     clustered_df["-log10p"] = clustered_df.groupby(["cluster", "cluster_"])["-log10p"].transform("mean").astype(float).round(2)
     clustered_df["-log10q"] = clustered_df.groupby(["cluster", "cluster_"])["-log10q"].transform("mean").astype(float).round(2)
@@ -88,6 +115,7 @@ def main():
     # clustered_df.query("n == 1")
     # for row in .iterrows():
     # for peaks with > 1 summits, renew its peak intervals
+    print("Update peaks with more than 1 summits (split peaks based on summit) ...")
     multi_summit = clustered_df.query("n != 1").copy().sort_values(by = ["chrom", "start", "end", "summit"])
     new_c_df = list()
     for c,c_df in multi_summit.groupby(["chrom", "start", "end"], as_index = False):
@@ -101,9 +129,15 @@ def main():
     clustered_df_new = pd.concat([clustered_df.query("n == 1"), multi_summit_new], axis = 0)
     clustered_df_new["relSummit"] = clustered_df_new["summit"]-clustered_df_new["start"]
     clustered_df_new.sort_values(by = ["chrom", "start"], inplace = True)
+    if args.blacklist is not None:
+        print("Remove peaks overlappying blacklist site ...")
+        from utilities.peak_tools import rmblacklist
+        blacklist_df = bf.read_table(args.blacklist, schema = "bed3")
+        clustered_df = rmblacklist(clustered_df_new, blacklist_df)
     # write into output file
     clustered_df_new[narrowPeak_col].to_csv(output + ".narrowPeak", sep = "\t", header = False, index = False)
     if args.saf:
+        print("report in SAF & bed format ...")
         saf = clustered_df_new[["name", "chrom", "start", "end"]].copy()
         saf["name_new"] = range(len(saf))
         saf["name_new"] = "peak_" + saf["name_new"].astype(str)
