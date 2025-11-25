@@ -65,15 +65,16 @@ def STAR_PE(r1, r2, star_index, gtf, name, thread):
     Output:
     None 
     """
-    STAR_process = f"STAR --runThreadN {thread} --genomeDir {star_index} --sjdbGTFfile {gtf} --readFilesIn {r1} {r2} --twopassMode Basic --sjdbOverhang 50 --outFileNamePrefix {name} --outSAMtype BAM SortedByCoordinate && samtools index -@ {thread} {name}Aligned.sortedByCoord.out.bam"
+    STAR_process = f"STAR --runThreadN {thread} --genomeDir {star_index} --sjdbGTFfile {gtf} --readFilesIn {r1} {r2} --twopassMode Basic --sjdbOverhang 50 --outFileNamePrefix {name} --outSAMtype BAM SortedByCoordinate "
     if r1.endswith(".gz"):
         STAR_process += " --readFilesCommand zcat"
+    STAR_process += f" && samtools index -@ {thread} {name}Aligned.sortedByCoord.out.bam"
     subprocess.call(STAR_process, shell = True)
     # remove temporatory directories when exists
     import shutil 
     try:
-        shutil.rmtree(f"{output}_STARgenome")
-        shutil.rmtree(f"{output}_STARpass1")
+        shutil.rmtree(f"{name}_STARgenome")
+        shutil.rmtree(f"{name}_STARpass1")
     except Exception as e:
         pass
 

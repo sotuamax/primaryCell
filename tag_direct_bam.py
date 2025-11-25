@@ -46,20 +46,26 @@ def main():
     print("Write new BAM with @RG ...")
     with pysam.AlignmentFile(new_bam, "wb", text = header, threads = n) as newbam:
         for read in bam_handle.fetch():
-            try:
-                read.set_tag("RG", barcode_gene_dict[read.query_name.split(":")[-1]], value_type = "Z")
-                newbam.write(read)
-            except:
-                pass
+            if read.reference_name.startswith("chr") and read.reference_name not in ["chrY", "chrM"]:
+                try:
+                    read.set_tag("RG", barcode_gene_dict[read.query_name.split(":")[-1]], value_type = "Z")
+                    newbam.write(read)
+                except:
+                    pass
     subprocess.call(f"samtools index -@ {n} {new_bam}", shell = True)
     # split bam file based on its RG
-    if args.bw:
-        from utilities.bam_tools import bam2bw
-        print("Generate bigwig ...")
-        bam2bw(new_bam, new_bam.replace(".bam", ".bw"), n)
     if args.split:
         print("Generate split BAM ...")
         subprocess.call(f"samtools split {new_bam} -f '%*_%!.%.' -@ {n}", shell = True)
+        if args.bw:
+            from utilities.bam_tools import bam2bw
+            print("Generate bigwig ...")
+            all_flag = sorted(set(flag_df["label"]))
+            for flag in all_flag:
+                if os.path.exists(f"{args.output}_{flag}.bam"):
+                    n_bam = f"{args.output}_{flag}.bam"
+                    subprocess.call(f"samtools index -@ {n} {n_bam}", shell = True)
+                    bam2bw(n_bam, n_bam.replace(".bam", ".bw"), n, smooth=100) # by default, no normalization 
 
 if __name__ == "__main__":
     main()

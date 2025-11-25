@@ -12,9 +12,8 @@ def ignore_warning():
     Ignore warnings 
     """
     import sys 
-    if not sys.warnoptions:
-        import warnings
-        warnings.simplefilter("ignore")
+    import warnings
+    warnings.filterwarnings("ignore")
 
 def module_load(modules:list):
     """

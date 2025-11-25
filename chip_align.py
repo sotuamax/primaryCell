@@ -51,13 +51,13 @@ def main():
         read = args.read 
         r1 = " ".join(read)
         # r1 = glob.glob(f"{read}_*R1.fastq.gz")[0]; r2 = glob.glob(f"{read}_*R2.fastq.gz")[0]
-        name = os.path.join(args.outdir, os.path.basename(read[0]).split("_")[0])
+        name = os.path.basename(read[0]).split("_R1")[0]
         align_command = f"bwa mem {ref} {r1} -t {n} | samtools view -@ {n} -Su - | samtools sort -@ {n} - -o {name}.bam && samtools index -@ {n} {name}.bam"
         if not os.path.exists(name + ".bam"):
             print("Perform alignment ...")
             subprocess.call(align_command, shell = True)
         
-        align_stat = f"samtools flagstat -@ {n} {name}.bam > {name}.stat"
+        align_stat = f"samtools flagstat -@ {n} {name}.bam -O tsv > {name}.stat"
         if not os.path.exists(name + ".stat"):
             subprocess.call(align_stat, shell=True)
         if args.force:

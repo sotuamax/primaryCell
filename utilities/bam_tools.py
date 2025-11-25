@@ -2,6 +2,34 @@ import pysam
 import subprocess
 import os 
 import pandas as pd 
+import bioframe as bf 
+
+
+
+def bed2bam(bed, bam, new_bam, n = 4):
+    """
+    bam servers as a header template; 
+    bed provide read coordinate information; 
+    write into a new bam file which stores read information w/ cooridnates from bed and other filled by pseudo-information. 
+    """
+    bam_handle = pysam.AlignmentFile(bam, "rb", threads = n)
+    bed_df = bf.read_table(bed, schema = "bed6")
+    with pysam.AlignmentFile(new_bam, "wb", template = bam_handle, threads = n) as bam_write:
+        for row in bed_df.itertuples():
+            # only use read as a placeholder, other information is not meanful 
+            read = pysam.AlignedSegment()
+            read.query_name = row.name
+            read.query_sequence = "N"*(row.end-row.start)  # must match CIGAR length
+            read.flag = 0 if row.strand == "+" else 16 # mapped, forward strand
+            read.reference_id = bam_write.get_tid(row.chrom)
+            read.reference_start = row.start  # 0-based start
+            read.mapping_quality = row.score
+            read.cigar = [(0, row.end - row.start)]  # 0 = 'M' (match)
+            read.next_reference_id = -1
+            read.next_reference_start = -1
+            read.template_length = 0
+            read.query_qualities = pysam.qualitystring_to_array("F"*(row.end - row.start))
+            bam_write.write(read)
 
 def flagstats(bam, n):
     name = bam.replace(".bam", "")
@@ -132,8 +160,11 @@ def bam2bedpe(bam, name):
     bedpe_command = f"bedtools bamtobed -i {bam} -bedpe > {name}"
     subprocess.call(bedpe_command, shell = True)
 
-def bam2bw(bam, bw, n):
-    bw_command = f"bamCoverage -b {bam} -o {bw} -of bigwig -p {n} --normalizeUsing CPM"
+def bam2bw(bam, bw, n, smooth = 20, norm = False):
+    if norm:
+        bw_command = f"bamCoverage -b {bam} -o {bw} -of bigwig -p {n} --normalizeUsing CPM --smoothLength {smooth}"
+    else:
+        bw_command = f"bamCoverage -b {bam} -o {bw} -of bigwig -p {n} --smoothLength {smooth}"
     subprocess.call(bw_command, shell=True)
 
 def bam_count(bam, chr = None, start = None, end = None, n = 1):

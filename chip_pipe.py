@@ -7,7 +7,7 @@ import subprocess
 def args_parser():
     '''parser the argument from terminal command'''
     parser = argparse.ArgumentParser(prog = "PROG", add_help = True, formatter_class = argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("sample", help = "samples in a xlsx file to process")
+    parser.add_argument("sample", help = "samples in a xlsx file to process (column: id)")
     parser2 = argparse.ArgumentParser(prog = "PROG", add_help=True)
     sub_parsers = parser2.add_subparsers(dest = "mode", help = "mode to run")
     process = sub_parsers.add_parser("process", help = "process sample data", parents = [parser], add_help = False)
@@ -18,6 +18,7 @@ def args_parser():
     process.add_argument("-n", "--thread", help = "thread number (default: 4)", default = 4, type = int)
     # process.add_argument("-m", "--m", choices=["SE", "PE"], help = "read alignment mode in SE/PE")
     summary = sub_parsers.add_parser("summary", help = "generate summary report", parents = [parser], add_help = False)
+    summary.add_argument("-outdir", "--outdir", required = False, help = "output directory")
     args = parser2.parse_args()
     return args
 
@@ -36,21 +37,22 @@ def main():
     print(args.mode)
     # process samples 
     if args.mode == "summary": 
+        from utilities.parse_log import mark_log_parser, flagstat_tsv_parse 
         import json
         out = args.sample.replace(".xlsx", "_report.xlsx")
-        log_dir = "/data/jim4/Seq/CRISPR/log"
-        jlist = list()
+        outdir = args.outdir 
+        sample_info_list = list()
         for row in sample_df.itertuples():
-            logf = os.path.join(log_dir, f"{row.id}.log")
-            with open(logf, "r") as logj:
-                jdict = json.load(logj)
-                jdf = pd.DataFrame.from_dict(jdict, orient = "index")
-                jlist.append(jdf)
-        sample_report = pd.concat(jlist, axis = 1).transpose()
-        # print(sample_report)
-        sample_report = pd.merge(sample_df, sample_report, left_on = "id", right_on = "sample").drop("sample", axis = 1)
+            stat_file = os.path.join(outdir, f"{row.id}.stat")
+            aligned_info = flagstat_tsv_parse(stat_file)
+            mark_file = os.path.join(outdir, f"{row.id}.dedup.metric")
+            dup_info = mark_log_parser(mark_file)
+            all_info = {"sample":row.id} | aligned_info | dup_info
+            sample_info_list.append(pd.Series(all_info))
+        sample_report = pd.DataFrame(sample_info_list)
+        sample_report["aligned_ratio"] = round(sample_report["aligned"].astype(int)/sample_report["total"].astype(int), 2)
         with pd.ExcelWriter(out, mode = "w") as writer:
-            sample_report.to_excel(writer, index = False)
+            sample_report[["sample", "total", "aligned", "aligned_ratio", "dup_rate"]].to_excel(writer, index = False)
         
     if args.mode == "process":
         dir = args.directory

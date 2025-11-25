@@ -3,6 +3,57 @@ import numpy as np
 import bioframe as bf
 import os 
 
+
+def open_loop(file):
+    """
+    open loop file by automatic detecting its format
+    supporting format: 
+    - longrange:
+    - bedpe: (not standard bedpe file, no strand information)
+    """
+    if file.endswith(".longrange"):
+        df = pd.read_table(file, sep = "\t", header = None)
+        df.columns = ["chrom1", "start1", "end1", "connect"]
+        df[["connect", "contact"]] = df["connect"].str.split(",", expand = True)
+        df[["chrom2", "pos2"]] = df["connect"].str.split(":", expand = True)
+        df[["start2", "end2"]] = df["pos2"].str.split("-", expand = True)
+        df.drop(["connect", "pos2"], axis = 1, inplace = True)
+    if file.endswith(".bedpe"):
+        df = pd.read_table(file, sep = "\t", header = None)
+        df.columns = ["chrom1", "start1", "end1", "chrom2", "start2", "end2", "contact"]
+    if file.endswith(".txt"):# row names as loop in str chr1:start1-end1_chr2:start2-end2 
+        df = pd.read_table(file, sep = "\t", header = 0, index_col = 0).reset_index()
+        p1,p2 = df["index"].str.split("_", expand = True)[0],df["index"].str.split("_", expand = True)[1]
+        chr1,pp1 = p1.str.split(":", expand = True)[0],p1.str.split(":", expand = True)[1]
+        df[["start1", "end1"]] = pp1.str.split("-", expand = True)
+        chr2,pp2 = p2.str.split(":", expand = True)[0],p2.str.split(":", expand = True)[1]
+        df[["start2", "end2"]] = pp2.str.split("-", expand = True)
+        df["chrom1"] = chr1;df["chrom2"] = chr2
+    df["start1"] = df["start1"].astype(int); df["end1"] = df["end1"].astype(int)
+    df["start2"] = df["start2"].astype(int); df["end2"] = df["end2"].astype(int); df["contact"] = df["contact"].astype(int)
+    return df[["chrom1", "start1", "end1", "chrom2", "start2", "end2", "contact"]]
+
+def concate_chrom(df):
+    df["name"] = df["chrom1"].astype(str) + ":" + df["start1"].astype(str) +  "-" + df["end1"].astype(str) + "_" + df["chrom2"].astype(str) +  ":" + df["start2"].astype(str) + "-" + df["end2"].astype(str)
+    return df[["name"]]
+
+def union_loop(file_list):
+    df_list = list()
+    for file in file_list:
+        df = open_loop(file).drop_duplicates(keep = "first")
+        new_index = ["chrom1", "start1", "end1", "chrom2", "start2", "end2"]
+        df_list.append(df[new_index].set_index(new_index))
+    join_df = df_list[0].join(df_list[1:], how = "outer").reset_index()
+    return join_df
+
+def intersect_loops(file_list):
+    df_list = list()
+    for file in file_list:
+        df = open_loop(file)
+        new_index = [c for c in df.columns if c != "contact"]
+        df_list.append(df.set_index(new_index).rename(columns = {"contact":file})) 
+    return df_list[0].join(df_list[1:], how = "inner")
+
 def bedpe_dist(bedpe_f):
     dist_list = list()
     for chunk in pd.read_table(bedpe_f, sep = "\t", header = None, names = ["chrom1", "start1", "end1", "chrom2", "start2", "end2", "name", "score", "strand1", "strand2"], chunksize = 10000):
@@ -11,24 +62,6 @@ def bedpe_dist(bedpe_f):
                 pe_dist = row.end2 - row.start1 
                 dist_list.append(pe_dist)
     return dist_list 
-
-def tether_bed(anchor_df, distance):
-    """
-    Tether anchors when the distance between is less than a cutoff
-    Inputs: 
-    anchor_df: pandas df in bed format (minimum: chrom, start, end);
-    distance: distance cutoff use to tether anchors;
-    Return: 
-    df: tethered anchor in bed format (labeled by: its length, and number of anchors contributed to the tethering)
-    """
-    anchor_stitch_df = bf.cluster(anchor_df, min_dist = distance)
-    #anchor_stitch_df["length"] = anchor_stitch_df["cluster_end"] - anchor_stitch_df["cluster_start"]
-    anchor_stitch_df["count"] = anchor_stitch_df.groupby(["chrom", "cluster_start", "cluster_end"])["start"].transform("nunique")
-    # select columns of interest
-    anchor_stitch_df = anchor_stitch_df[["chrom", "cluster_start", "cluster_end", "count"]].rename(columns = {"cluster_start":"start", "cluster_end":"end"})
-    # remove duplicates 
-    anchor_return = anchor_stitch_df.drop_duplicates(keep = "first")
-    return anchor_return
 
 def cis_trans_bed(bed):
     """
@@ -82,8 +115,7 @@ def bedpe_retrieve(region, loop_df):
     selected loop_df that overlaps the given region. 
     """
     # check if loop_df index duplicated or not 
-    if len(set(loop_df.index)) != len(loop_df):
-        loop_df.index = range(len(loop_df))
+    assert len(set(loop_df.index)) == len(loop_df), print("loop not uniquely indexed")
     # get loop (left, chrom1, start1, end1) overlap region
     left_loop = bf.select(loop_df.rename(columns = {"chrom1":"chrom", "start1":"start", "end1":"end"}), region)
     # get loop (right, chrom2, start2, end2)

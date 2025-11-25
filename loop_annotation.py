@@ -193,6 +193,9 @@ def main():
     loop_ann_df = annotate_loop(loop_df, anchor_ann, transcript_df)
     loop_ann_grouped = group_loop(loop_ann_df)
     loop_ann_grouped.to_csv(args.output + ".txt", sep = "\t", header = True, index = False)
+    # add name 
+    loop_ann_grouped["name"] = loop_ann_grouped["chrom1"].astype(str) + ":" + loop_ann_grouped["start1"].astype(str) + "-" + loop_ann_grouped["end1"].astype(str) + "_" + loop_ann_grouped["chrom2"].astype(str) + ":" + loop_ann_grouped["start2"].astype(str) + "-" + loop_ann_grouped["end2"].astype(str)
+    loop_ann_grouped.drop(["chrom1", "start1", "end1", "chrom2", "start2", "end2"], axis = 1)[["name", "gene1", "gene2", "subcategory", "category"]].to_csv(args.output + "_clean.txt", sep = "\t", header = True, index = False)
     # get loop category count 
     loop_category = loop_ann_grouped[["chrom1", 'start1', "end1", "chrom2", "start2", "end2", "subcategory", "category"]].drop_duplicates(keep = "first")
     class_freq = pd.DataFrame(loop_category.groupby(["subcategory", "category"]).size(), columns=["freq"])

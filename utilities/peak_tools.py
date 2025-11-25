@@ -2,6 +2,7 @@ import bioframe as bf
 import pandas as pd 
 import numpy as np 
 import subprocess
+import os 
 
 def peakcall(file):
     """
@@ -47,7 +48,7 @@ def peak_parse(peak:str, chrom = None):
     peak (dataframe): peak file name (in narrowPeak format)
     chrom (list): list of chromosomes to filter
     Return: 
-    dataframe: re-format peak input dataframe, containing columns chrom/start/end/summit
+    dataframe: re-format peak input dataframe, containing columns chrom/start/end/summit in sorted format.
     """
     import bioframe as bf
     if peak.endswith(".narrowPeak"):
@@ -57,11 +58,10 @@ def peak_parse(peak:str, chrom = None):
         peak_df = bf.read_table(peak, schema = "bed3")
     if chrom != None:
         peak_df = peak_df.query("chrom in @chrom").copy()
-    peak_df.sort_values(["chrom", "start"], inplace = True)
-    peak_df.index = range(len(peak_df))
+    peak_df.sort_values(["chrom", "start"], inplace = True, ignore_index = True)
     return peak_df
 
-def generate_paired_peak(peak_df:pd.DataFrame, region = None):
+def generate_paired_peak(peak_df:pd.DataFrame, max_dist:int, region = None):
     """
     accept peak dataframe, to report any paired peak combinations in its index format. 
     return: dictionary {index_a:range(index_b, index_n)}
@@ -76,8 +76,18 @@ def generate_paired_peak(peak_df:pd.DataFrame, region = None):
     # bins = sorted(set(zip(view_peak["start"]//resolution, view_peak["end"]//resolution+1)))
     # bins = sorted(set(view_peak["summit"]//resolution))
     # if do not use summit, use peak range, and within the range, the maximum observed count used. 
-    last_peak = view_peak.index.max(); first_peak = view_peak.index.min()
-    pairs = {i:range(i+1, last_peak+1) for i in range(first_peak, last_peak)}
+    # last_peak_index = view_peak.index.max(); first_peak_index = view_peak.index.min()
+    mid_region = (region[1]+region[-1])//2 if region[-1] - region[1] == max_dist*2 else region[-1]
+    #print(region[0], region[1], mid_region)
+    # view_bin = view_peak["start"]//resolution
+    view_max = view_peak["start"].max()
+    anchor_df = view_peak.query("start < @mid_region and start < @view_max")
+    # use view_peak.max to control for the very last anchor (no more pairwise relationships)
+    pairs = dict()
+    for row in anchor_df.itertuples():
+        if len(view_peak[(view_peak["start"] < row.start + max_dist) & (view_peak["start"] > row.start)]) > 0:
+            pairs[row.Index] = range(row.Index+1, view_peak[(view_peak["start"] < row.start + max_dist) & (view_peak["start"] > row.start)].index.max()+1)
+    # pairs = {row.Index: range(row.Index+1, view_peak[(view_peak["start"] < row.start + max_dist) & (view_peak["start"] > row.start)].index.max()+1) for row in anchor_df.itertuples()}
     # paired_anchor = {bins[i]:np.array([b2 for b2 in bins[i+1:] if (b2[0]-bins[i][0] < max_dist//resolution) and (b2[0]-bins[i][0] > min_dist//resolution)]) for i in range(len(bins)-1)}
     # from itertools import combinations 
     # paired_anchor = pd.DataFrame([(a1,a2) for a1,a2 in combinations(bins, 2) if (abs(a1[0]-a2[0]) > min_dist//resolution) and (abs(a1[0]-a2[0]) < max_dist//resolution)], columns = ["anchor1", "anchor2"])
@@ -239,4 +249,61 @@ def overlay2peaks(peak_over_chrom, consensus_chrom, min_dist):
     return peak_combine, peak_drop
 
 
+def homer_peak_ann_parser(p_df, promoter_range = 0):
+    """
+    Process peak annotated by Homer, and 
+    report the frequency of each type of annotated peaks (e.g., promoter, intergenic, intron)
+    """
+    freq_dict = {
+        "3' UTR":0,
+        "5' UTR":0,
+        "Intergenic":0,
+        "TTS":0,
+        "exon":0,
+        "intron":0,
+        "non-coding":0,
+        "promoter-TSS":0
+    }
+    peak_df = p_df[(p_df["Chr"].str.startswith("chr")) & ~(p_df["Chr"].isin(["chrY", "chrM"]))].copy()
+    if "Peak Score" in peak_df.columns:
+        peak_df.drop(["Chr", "Start", "End", "Strand", "Peak Score", 'Focus Ratio/Region Size'] + [c for c in peak_df.columns if c.startswith("PeakID")], axis = 1, inplace = True)
+    if promoter_range > 1000:
+        # when peak distance from TSS is less than a cutoff, re-annotate peak as promoter-TSS 
+        peak_df["Annotation"] = np.where(np.abs(peak_df["Distance to TSS"]) < promoter_range, "promoter-TSS", peak_df["Annotation"])
+    peak_type = peak_df["Annotation"].str.replace(r'\s*\([^)]*\).*', '', regex=True)
+    type_uniq, type_freq = np.unique(peak_type, return_counts = True)
+    for t in zip(type_uniq, type_freq):
+        freq_dict[t[0]] = t[-1]
+    type_df = pd.DataFrame.from_dict(freq_dict, orient = "index").reset_index()
+    type_df.columns = ["peak_type", "freq"]
+    # type_df.sort_values("freq", ascending=False, inplace = True)
+    type_df["ratio"] = round(type_df["freq"]/type_df["freq"].sum()*100, 2)
+    return type_df
+
+def combine_ann_summary(ann_file_list, p = 0, sort = True):
+    """
+    combine a list of files annotated by Homer
+    """
+    ann_list = list()
+    for ann in ann_file_list:
+        ann_df = pd.read_table(ann, sep = "\t", header = 0)
+        factor = os.path.basename(ann).split(".ann")[0]
+        ann_summary = homer_peak_ann_parser(ann_df, promoter_range = p)
+        ann_summary.sort_values("peak_type", inplace = True, ignore_index=True)
+        ann_summary = ann_summary.set_index("peak_type").transpose()
+        ann_summary.index = [f"{factor}_freq", f"{factor}_ratio"]
+        ann_list.append(ann_summary)
+    ann_all = pd.concat(ann_list, axis = 0)
+    # from freq to get total number of peaks 
+    ann_peak_freq = ann_all[ann_all.index.str.endswith("_freq")]
+    ann_peak_total = pd.DataFrame(ann_peak_freq.sum(axis = 1), columns = ["peak"]); ann_peak_total["peak"] = ann_peak_total["peak"].astype(int)
+    ann_peak_total.index = [i.split("_freq")[0] for i in ann_peak_total.index]
+    # get ratio and update row names by removing _ratio suffix 
+    ann_ratio = ann_all[ann_all.index.str.endswith("_ratio")]
+    ann_ratio.index = [i.split("_ratio")[0] for i in ann_ratio.index]
+    # 
+    ann_ratio_df = pd.merge(ann_peak_total, ann_ratio, left_index = True, right_index = True)
+    if sort: 
+        ann_ratio_df.sort_index(inplace = True)
+    return ann_ratio_df 
 

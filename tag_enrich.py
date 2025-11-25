@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-
+"""
+Given bed file, to evaluate the enrichment of center bed against its surrounding regions. 
+"""
 import pandas as pd 
 import numpy as np 
 import argparse 

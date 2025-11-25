@@ -100,7 +100,7 @@ def mark_log_parser(log):
                 dup_rate = line.split("\t")[-2]
                 log_info["pass_markdup_reads"] = int(pair_read)
                 log_info["dup_rate"] = float(dup_rate)
-                log_info["dup_yield"] = 1-log_info["dup_rate"]
+                # log_info["dup_yield"] = 1-log_info["dup_rate"]
                 break
             if line.startswith("LIBRARY"):
                 i += 1
@@ -125,13 +125,18 @@ def markdup_log_parser(file):
     return df
 
 def flagstat_tsv_parse(f):
+    map_info = dict()
     df = pd.read_table(f, sep = "\t", header = None, names = ["pass", "fail", "category"])
-    total_mapped = df.query("category == 'primary mapped'")["pass"].values[0]
+    total_mapped = df.query("category == 'primary mapped'")["pass"].item()
+    map_info["aligned"] = total_mapped
+    total = df.query("category == 'total (QC-passed reads + QC-failed reads)'")["pass"].item()
+    map_info["total"] = total
+    return map_info 
     # r1 = df.query("category == 'read1'")["pass"].values[0]
     # r2 = df.query("category == 'read2'")["pass"].values[0]
-    trans = df.query("category == 'with mate mapped to a different chr'")["pass"].values[0]
-    cis = (total_mapped-trans)//2*0.95
-    return cis 
+    # trans = df.query("category == 'with mate mapped to a different chr'")["pass"].values[0]
+    # cis = (total_mapped-trans)//2*0.95
+    # return cis 
 
 def flagstat_parser(log):
     """

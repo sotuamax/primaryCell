@@ -34,7 +34,7 @@ def global_exp(clr_matrix:np.ndarray):
 
 def local_exp_interaction(clr_matrix:np.ndarray, offset:int, group_region:tuple, wl:list):
     """
-    retrieve expected counts for given distance of peak pairs
+    retrieve expected counts for given distance of peak pairs. (average for screened region as expected value)
     Inputs:
     bp_obs_filtered: dataframe of observed count after filtering 
     clr: cooler handle 
@@ -42,6 +42,8 @@ def local_exp_interaction(clr_matrix:np.ndarray, offset:int, group_region:tuple,
     window: number of bins for expected value calculation (at local scale, default: 0.5 M)
     Returns:
     dataframe: observed and expected contacts of a window region at a given distance
+
+    Note: mean is for any diagonal region that overlap the requested site (it may cross multiple bins).
     """
     bg_mean = list()
     a1, b1, a2, b2 = group_region # 
@@ -50,19 +52,9 @@ def local_exp_interaction(clr_matrix:np.ndarray, offset:int, group_region:tuple,
         ar1_w, ar2_w = np.where(np.array([ar1, ar2]) - w < 0, 0, np.array([ar1, ar2]) - w)
         br1_w, br2_w = np.where(np.array([br1, br2]) + w > clr_matrix.shape[0], clr_matrix.shape[0], np.array([br1, br2]) + w)
         obs_mat = clr_matrix[ar1_w:br1_w, ar2_w:br2_w] # matrix[row_start:row_end, col_start:col_end]
-        obs_diag = get_diag(obs_mat, i = 0)
-        if b1 - a1 > 1: # locus 1
-            # positive diagonal 
-            for o in range(1, b1 - a1):
-                obs_diag_o = get_diag(obs_mat, i = -o)
-                obs_diag = np.concatenate((obs_diag, obs_diag_o))
-        if b2 - a2 > 1: # locus 2 
-            # negative diagonal 
-            for o in range(1, b2-a2):
-                obs_diag_o = get_diag(obs_mat, i = o)
-                obs_diag = np.concatenate((obs_diag, obs_diag_o))
-        bg_mean_w = obs_diag.mean()
-        bg_mean.append(bg_mean_w) 
+        obs_diag = get_diag(obs_mat, i = 0) # the obs_mat is in a oddxodd matrix
+        bg_mean_w = np.concatenate([obs_diag[:w],obs_diag[w+1:]]).mean()
+        bg_mean.append(bg_mean_w)
     exp_df = pd.DataFrame([[a1,b1,a2,b2] + bg_mean], columns = ["start1", "end1", "start2", "end2"] + [f"exp_{w}" for w in wl])
     return exp_df
 
@@ -101,7 +93,7 @@ def obs_interaction(clr_matrix, peak_df, offset:int, chrom:str, bin1_pos:int, bi
         #b = bpv-offset
         #if abs(a-b) < 10:
         try:
-            bp_obs = clr_matrix[a[0]-offset:a[-1]-offset, bpv[0]-offset:bpv[-1]-offset].max() # in python, it's always left close, right open (exclusive)
+            bp_obs = clr_matrix[a[0]-offset:a[-1]-offset, bpv[0]-offset:bpv[-1]-offset][0][0] # in python, it's always left close, right open (exclusive)
             #else: # matrix slicing: matrix[row_start:row_end, col_start:col_end]
             #bp_obs = clr_matrix[a-1:a+2, b-1:b+2].max()
             if bp_obs > 0: 
@@ -112,7 +104,8 @@ def obs_interaction(clr_matrix, peak_df, offset:int, chrom:str, bin1_pos:int, bi
                 bp_0_cutoff = 0
             if bp_0_cutoff >= stop_sign_of_0:
                 break
-        except:
+        except Exception as e:
+            print(e)
             pass
     bp_df = pd.DataFrame(bp_list, columns = ["start2", "end2", "obs"]); bp_df["start1"] = a[0];bp_df["end1"] = a[-1]; bp_df["chrom1"] = chrom;bp_df["chrom2"] = chrom
     return bp_df[["chrom1", "start1", "end1", "chrom2", "start2", "end2", "obs"]]
