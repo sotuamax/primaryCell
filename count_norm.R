@@ -5,8 +5,8 @@ suppressMessages(library("DESeq2"))
 
 parse_arg <- function() {
     parser <- ArgumentParser(description = "Usage: Rscript count_norm.R")
-    parser$add_argument("count", help = "feature count file ")
-    parser$add_argument("-norm", "--normalization", default = "RPM", help = "normalization methods", choices = c("RPM", "DESeq2"))
+    parser$add_argument("-count", "--count", nargs = "+", help = "feature count file ")
+    parser$add_argument("-norm", "--normalization", default = "DESeq2", help = "normalization methods", choices = c("RPM", "DESeq2"))
     parser$add_argument("-updatecol", "--updatecol", action = "store_true", help = "update column names")
     parser$add_argument("-o", "--output", help = "output name")
     parser$parse_args()
@@ -16,11 +16,20 @@ args <- parse_arg()
 count <- args$count 
 
 print("Read count file ...")
-feature_count <- read.table(count, sep = "\t", header = T, row.names = 1, comment.char = "#", check.names = F) 
+count_list <- list()
+for (c in count) {
+    feature_count <- read.table(c, sep = "\t", header = T, row.names = 1, comment.char = "#", check.names = F) 
+    if ("Chr" %in% colnames(feature_count)) {
+        feature_mat <- feature_count |> select(-c(Chr,Start,End,Strand,Length))
+    } else {feature_mat <- feature_count}
+    count_list[[c]] <- feature_mat
+}
+
+names(count_list) <- NULL
+feature_mat <- do.call(cbind, count_list)
+
 # feature_size <- feature_count |> select(c("Length"))
-if ("Chr" %in% colnames(feature_count)) {
-    feature_mat <- feature_count |> select(-c(Chr,Start,End,Strand,Length))
-} else {feature_mat <- feature_count}
+
 
 # remove gene_name if ever exists 
 if ("gene_name" %in% colnames(feature_mat)) {
@@ -74,11 +83,11 @@ if (args$normalization == "RPM") {
 if (args$normalization == "DESeq2") {
     print("Perform normalization using DESeq2 ...")
     print('Write raw count ...')
-    feature_mat |> write.table(paste0(args$output, ".txt"), sep = "\t", quote = F, row.names = T)
+    feature_mat |> write.table(paste0(args$output, "_mat.txt"), sep = "\t", quote = F, row.names = T)
     colname <- colnames(feature_mat)
     col_sample <- data.frame(sample = colname)
     print("Write samples ...")
-    col_sample |> write.table(paste0(args$output, ".sample.txt"), sep = "\t", quote = F, row.names = F)
+    col_sample |> write.table(paste0(args$output, "_sample.txt"), sep = "\t", quote = F, row.names = F)
     dds <- DESeqDataSetFromMatrix(countData = feature_mat, colData = col_sample, design = ~ 1)
     dds <- estimateSizeFactors(dds)
     norm_cts <- counts(dds, normalized = T)
