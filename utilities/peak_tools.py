@@ -4,6 +4,8 @@ import numpy as np
 import subprocess
 import os 
 
+
+    
 def peakcall(file):
     """
     default genome: hs (hg38)
@@ -249,7 +251,7 @@ def overlay2peaks(peak_over_chrom, consensus_chrom, min_dist):
     return peak_combine, peak_drop
 
 
-def homer_peak_ann_parser(p_df, promoter_range = 0):
+def homer_peak_ann_parser(p_df, promoter_range = 0, return_freq = True):
     """
     Process peak annotated by Homer, and 
     report the frequency of each type of annotated peaks (e.g., promoter, intergenic, intron)
@@ -266,19 +268,24 @@ def homer_peak_ann_parser(p_df, promoter_range = 0):
     }
     peak_df = p_df[(p_df["Chr"].str.startswith("chr")) & ~(p_df["Chr"].isin(["chrY", "chrM"]))].copy()
     if "Peak Score" in peak_df.columns:
-        peak_df.drop(["Chr", "Start", "End", "Strand", "Peak Score", 'Focus Ratio/Region Size'] + [c for c in peak_df.columns if c.startswith("PeakID")], axis = 1, inplace = True)
+        peak_df.rename(columns = {"Chr":"chrom", "Start":"start", "End":"end"}, inplace = True)
+        peak_df.drop(["Strand", "Peak Score", 'Focus Ratio/Region Size'] + [c for c in peak_df.columns if c.startswith("PeakID")], axis = 1, inplace = True)
     if promoter_range > 1000:
         # when peak distance from TSS is less than a cutoff, re-annotate peak as promoter-TSS 
         peak_df["Annotation"] = np.where(np.abs(peak_df["Distance to TSS"]) < promoter_range, "promoter-TSS", peak_df["Annotation"])
-    peak_type = peak_df["Annotation"].str.replace(r'\s*\([^)]*\).*', '', regex=True)
-    type_uniq, type_freq = np.unique(peak_type, return_counts = True)
-    for t in zip(type_uniq, type_freq):
-        freq_dict[t[0]] = t[-1]
-    type_df = pd.DataFrame.from_dict(freq_dict, orient = "index").reset_index()
-    type_df.columns = ["peak_type", "freq"]
-    # type_df.sort_values("freq", ascending=False, inplace = True)
-    type_df["ratio"] = round(type_df["freq"]/type_df["freq"].sum()*100, 2)
-    return type_df
+    if return_freq:
+        peak_type = peak_df["Annotation"].str.replace(r'\s*\([^)]*\).*', '', regex=True)
+        type_uniq, type_freq = np.unique(peak_type, return_counts = True)
+        for t in zip(type_uniq, type_freq):
+            freq_dict[t[0]] = t[-1]
+        type_df = pd.DataFrame.from_dict(freq_dict, orient = "index").reset_index()
+        type_df.columns = ["peak_type", "freq"]
+        # type_df.sort_values("freq", ascending=False, inplace = True)
+        type_df["ratio"] = round(type_df["freq"]/type_df["freq"].sum()*100, 2)
+        return type_df
+    else:
+        peak_df["ptype"] = peak_df["Annotation"].str.replace(r'\s*\([^)]*\).*', '', regex=True)
+        return peak_df 
 
 def combine_ann_summary(ann_file_list, p = 0, sort = True):
     """

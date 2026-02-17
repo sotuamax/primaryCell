@@ -26,6 +26,7 @@ dchic_pipe.py -cool /data/jim4/Seq/primary_cell_project/alignment/HiTrAC/pairs/n
 
 """
 import numpy as np 
+import bioframe as bf 
 import os 
 from sklearn.preprocessing import StandardScaler
 import pandas as pd
@@ -44,10 +45,11 @@ def args_parser():
     group.add_argument("-bin_pixel", nargs = 2, help = "chromosome bin and pixel file")
     #parser.add_argument("-pixel", help = "bin pixel file")
     parser.add_argument("-r", "--resolution", type = int, help = "resolution to use", required = False)
+    parser.add_argument("-select", "--select", action = "store_true", help = "select PC for compartment call")
     parser.add_argument("-blacklist", "--blacklist", help = "blacklist in bed format", required = False)
     parser.add_argument("-ref", "--reference", required = False, default = "hg38", help = "reference genome")
     parser.add_argument("-ref_path", "--ref_path", required = False, help = "the folder path for reference genome (not related to resolution)", default = "/data/jim4/Seq/primary_cell_project/analysis/Compartment/data/hg38_goldenpathData")
-    # parser.add_argument("-subcomp", "--subcompartment", action = "store_true", help = "when assigned, perform subcompartment run")
+    parser.add_argument("-pc", "--pc", type = int, default = 2, help = "number of PCs to be considered")
     parser.add_argument("-n", "--threads", type = int, default = 1, help = "threads number ")
     parser.add_argument("-o", "--output", help = "output file prefix name")
     args = parser.parse_args()
@@ -68,7 +70,7 @@ def df_group(df):
     df["bin"] = df.groupby("chrom")["z"].transform(bin_scale)
     return df
 
-def dchic_command(file, ref, ref_path, n = 1):
+def dchic_command(file, ref, ref_path, pc_num, select = False, n = 1):
     """"
     parameters of dchicf.r
     dchicf.r 
@@ -84,17 +86,18 @@ def dchic_command(file, ref, ref_path, n = 1):
     --pthread (parallel pca per chromosome per sample)
     """
     command = list()
-    # step1: perform PCA analysis on input data 
+    # step1: perform PCA analysis on input data
     # by default PCA run on cis interactions
-    step1 = f"dchicf.r --file {file} --pcatype cis --pc 2 --dirovwt T --cthread {n}"
+    step1 = f"dchicf.r --file {file} --pcatype cis --pc {pc_num} --dirovwt T --cthread {n}"
     command.append(step1)
     # step2: select PC for compartment assignment
     if ref_path is None:
-        step2 = f"dchicf.r --file {file} --pcatype select --genome {ref}"
+        step2 = f"dchicf.r --file {file} --pcatype select --pc {pc_num} --genome {ref}"
     else: 
         # the gfolder should contain 3 files: genome.fa genome.tss.bed genome.chrom.sizes 
-        step2 = f"dchicf.r --file {file} --pcatype select --genome {ref} --gfolder {ref_path}"
-    command.append(step2)
+        step2 = f"dchicf.r --file {file} --pcatype select --pc {pc_num} --genome {ref} --gfolder {ref_path}"
+    if select:
+        command.append(step2)
     # combine all steps (proceed to next step only if previous step succeed)
     return command
 
@@ -102,7 +105,6 @@ def main():
     start = time.time()
     args = args_parser()
     cool = args.cool
-    blacklist = args.blacklist
     resolution = args.resolution
     out = args.output
     bin = args.bin_pixel
@@ -112,19 +114,25 @@ def main():
         cool_input = parser_cool(cool, resolution)
         # get bin position across the genome 
         bin_bed = cool_input.bins()[:][["chrom", "start", "end"]]
-        bin_bed["index"] = bin_bed.index
+        bin_bed["i"] = bin_bed.index
         bin_bed = bin_bed[~bin_bed["chrom"].isin(["chrY", "chrM"])]
         # get pixel value (bin-bin contacts) 
         pixel_mat = cool_input.pixels()[:] # pixel_mat format: <indexA> <indexB> <count>
-        print(f"Write bin and pixel data with {resolution} into file ...")
-        bin_bed.to_csv(f"{out}_{resolution}.bed", sep = "\t", header = False, index = False)
-        pixel_mat.to_csv(f"{out}_{resolution}.pixel", sep = "\t", header = False, index = False)
+        pixel_mat.to_csv(f"{out}.pixel", sep = "\t", header = False, index = False)
+    bin_bed_row = len(bin_bed)
     # index is the index in bin_bed file 
     # remove blacklist region when blacklist is not 
-    if blacklist != None:
-        import bioframe as bf 
-        blacklist_df = bf.read_table(blacklist, schema = "bed3")
-        bin_bed = bf.subtract(bin_bed, blacklist_df) # double check subtract function 
+    if args.blacklist != None:
+        # when blacklist region is given, add a fifth column in the bed file
+        print("add a fifth column in bed file for blacklisted regions ...")
+        blacklist_df = bf.read_table(args.blacklist, schema = "bed3")
+        bin_bed = bf.overlap(bin_bed, blacklist_df, how = "left")
+        bin_bed["blacklisted"] = np.where(pd.isna(bin_bed["chrom_"]), 0, 1)
+        bin_bed = bin_bed[[c for c in bin_bed.columns if not c.endswith("_")]]
+        bin_bed.drop_duplicates(keep = "first", inplace = True)
+        assert len(bin_bed) == bin_bed_row, print("bed file changed!")
+    print(f"Write bin and pixel data with {resolution} into file ...")
+    bin_bed.to_csv(f"{out}.bed", sep = "\t", header = False, index = False)
     # write out bed (bin) and mat (pixel) for dchic run
     # write a file annotating bin_bed and pixel_mat 
     with open(out + ".file", "w") as fw:
@@ -132,11 +140,11 @@ def main():
         # <mat> <bin> <replicate> <sample>
         print("Prepare file for dchic ...")
         if cool != None:
-            fw.write(f"{out}_{resolution}.pixel\t{out}_{resolution}.bed\t{out}_{resolution}\t{out}\n")
+            fw.write(f"{out}.pixel\t{out}.bed\t{out}\t{out}\n")
         else:
             fw.write(f"{bin[-1]}\t{bin[0]}\t{out}\t{out}\n")
     # run dchic command 
-    command2run = dchic_command(out + ".file", args.reference, args.ref_path, n = args.threads)
+    command2run = dchic_command(out + ".file", args.reference, args.ref_path, args.pc, args.select, n = args.threads)
     try: 
         print("Run dchic ...")
         total_steps = len(command2run)
@@ -148,35 +156,36 @@ def main():
         print(e)
         exit(1)
     # reorganize dchic output once succeed 
-    sample_file = pd.read_table(out + ".file", sep = "\t", header = None, names = ["mat", "bed", "replicate", "sample"])
-    print("Gather dchic output ... ")
-    for row in sample_file.itertuples():
-        # note that dchic output name is in the name of the replicate 
-        file = row.replicate 
-        # the selected pca results 
-        # pc_selected = pd.read_table(file + "_chr_pc_selected.txt", sep = "\t", header = 0)
-        # pc value stored in directory 
-        dir = os.path.join(file + "_pca", "intra_pca", file + "_mat")
-        # collect all final pc values per chromosome 
-        pc_f = sorted([f for f in glob.glob(os.path.join(dir, "*.pc.bedGraph"))])
-        # combine pc values of all chromosomes 
-        if len(pc_f) > 0:
-            pc_all = pd.concat([pd.read_table(f, sep = "\t", header = None) for f in pc_f], axis = 0)
-            pc_all.to_csv(f"{out}_{resolution}.bedGraph", sep = "\t", header = False, index = False)
-            pc_all.columns = ["chrom", "start", "end", "value"]
-            pc_all["z"] = pc_all.groupby("chrom")["value"].transform(value_scale)
-            # pc_all["sign"] = np.sign(pc_all["value"])
-            # df["bin"] = df.groupby("chrom")["z"].transform(bin_scale)
-            if np.equal(np.sign(pc_all["z"]), np.sign(pc_all["value"])).sum() == len(pc_all):
-                print("After normalization (z-score), sign was not changed.")
+    if args.select:
+        sample_file = pd.read_table(out + ".file", sep = "\t", header = None, names = ["mat", "bed", "replicate", "sample"])
+        print("Gather dchic output ... ")
+        # all results from dchic will write into a folder named by "replicate"_pca/intra_pca/*_mat/. 
+        for row in sample_file.itertuples():
+            # note that dchic output name is in the name of the replicate 
+            file = row.replicate 
+            # the selected pca results 
+            # pc_selected = pd.read_table(file + "_chr_pc_selected.txt", sep = "\t", header = 0)
+            # pc value stored in directory 
+            dir = os.path.join(file + "_pca", "intra_pca", file + "_mat")
+            # collect all final pc values per chromosome 
+            pc_f = sorted([f for f in glob.glob(os.path.join(dir, "*.pc.bedGraph"))])
+            # combine pc values of all chromosomes 
+            if len(pc_f) > 0:
+                pc_all = pd.concat([pd.read_table(f, sep = "\t", header = None) for f in pc_f], axis = 0)
+                pc_all.to_csv(f"{out}.bedGraph", sep = "\t", header = False, index = False)
+                pc_all.columns = ["chrom", "start", "end", "value"]
+                pc_all["z"] = pc_all.groupby("chrom")["value"].transform(value_scale)
+                # pc_all["sign"] = np.sign(pc_all["value"])
+                # df["bin"] = df.groupby("chrom")["z"].transform(bin_scale)
+                if np.equal(np.sign(pc_all["z"]), np.sign(pc_all["value"])).sum() == len(pc_all):
+                    print("After normalization (z-score), sign was not changed.")
+                else:
+                    print("After normalization (z-score), sign changed. ")
+                    print("Correcting sign ...")
+                    pc_all["z"] = np.where(np.equal(np.sign(pc_all["z"]), np.sign(pc_all["value"])), pc_all["z"], -(pc_all["z"]))
+                pc_all.to_csv(f"{out}.bedGraph", sep = "\t", header = False, index = False)
             else:
-                print("After normalization (z-score), sign changed. ")
-                print("Correcting sign ...")
-                pc_all["z"] = np.where(np.equal(np.sign(pc_all["z"]), np.sign(pc_all["value"])), pc_all["z"], -(pc_all["z"]))
-            pc_all.to_csv(f"{out}_{resolution}.bedGraph", sep = "\t", header = False, index = False)
-        else:
-            print("pc select bedGraph file cannot be identified.")
-
+                print("pc select bedGraph file cannot be identified.")
     print(timeit(start))
 
 if __name__ == "__main__":

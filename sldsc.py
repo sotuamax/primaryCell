@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-stratified linkage disequilibrium score regression (S-LDSC)
+partitioned/stratified linkage disequilibrium score regression (S-LDSC)
 A method to test if specific genomic region contributes significantly to a phenotypic inheritance. 
 
 ldscore regression weights:
@@ -10,8 +10,8 @@ SNPs with high LD and low MAF generate more noises in statistic test, so lower w
 downweight low conficence SNPs to improve estimate of h2 
 for each chromosome, ldscore, M, M_5_50, log (ldscore w/ header : CHR, SNP, BP, L2)
 
-reference SNP: bim/bed/fam from plink (based on 1000G) 
-observation on ~1000 chrom (2 per individual), and ~10 Million SNPs across chr1-22 
+reference SNP: bim/bed/fam from plink (based on 1000G) - used to estimate the SNP LD. 
+observation on ~1000 chromosomes (2 per individual), and ~10 Million SNPs across chr1-22 
 for each chromosome, bed (genotype), bim, fam, frq 
 bim wo/ header : SNP; CHR, SNP, cM, BP, A1, A2 (genome version matters)
 fam wo/ header : family; FID (familyID), IID (individual ID), PID (Paternal ID, 0 for missing), MID (maternal ID), sex (0 for unknown), phenotype (-9/0 missing) 489 
@@ -41,10 +41,10 @@ def args_parser():
     parser.add_argument("-bed", "--bed", help = "bed file for regions of interest to test for enrichment of partitioned inheritance")
     parser.add_argument("-gwas", "--gwas", nargs = "+", help = "summary statistics for GWAS (support multiple GWAS input)")
     parser.add_argument("-scale_gwas", "--scale_gwas", action = "store_true", help = "scale GWAS score")
-    parser.add_argument("-ref_SNP", "--ref_SNP", help = "folder for reference SNP used to annotated bed file (bim/bed/frq/fam)", default = "/data/jim4/Seq/primary_cell_project/data/GWAS/GRCh38/plink_files/")
-    parser.add_argument("-baseline", "--baseline", help = "folder for baseline model used as conditioning", default = "/data/jim4/Seq/primary_cell_project/data/GWAS/GRCh38/baselineLD_v2.2")
+    parser.add_argument("-ref_SNP", "--ref_SNP", help = "folder for reference SNP used to annotated bed file (bim/bed/frq/fam)", default = "/data/jim4/Seq/primary_cell_project/analysis/SLDSC/data/1000G_EUR_SNP/")
+    parser.add_argument("-baseline", "--baseline", help = "folder for baseline model used as conditioning background (also filtered on 1000G SNPs)", default = "/data/jim4/Seq/primary_cell_project/analysis/SLDSC/data/baselineLD_v2.2")
+    parser.add_argument("-weights", "--weights", help = "weights score for SNPs (filtered on Hapmap3 SNPs)", default = "/data/jim4/Seq/primary_cell_project/analysis/SLDSC/data/weights")
     parser.add_argument("-bg", "--background", required = False, nargs = "+", help = "annotation for background region used to adjust enrichment in/out of a category annotation, prefix required")
-    parser.add_argument("-w", "--weights", help = "folder for regression weights", default = "/data/jim4/Seq/primary_cell_project/data/GWAS/GRCh38/weights")
     parser.add_argument("-outdir", "--outdir", help = "output directory", default = ".")
     args=parser.parse_args()
     return args
@@ -160,9 +160,12 @@ def main():
         subprocess.call(t, shell = True)
     # annot_prefix_collect = comm.bcast(annot_prefix_collect, root = 0)
     if rank == 0:
+        print("Read Hapmap3 SNP frequencies ...")
         frq_prefix = os.path.commonprefix(glob.glob(os.path.join(args.ref_SNP, "*.frq")))
+        print("Read reference SNP ldscore ...")
         weight_prefix = os.path.commonprefix(glob.glob(os.path.join(args.weights, "*.ldscore.gz")))
         # ldscore for baseline + custom annotation
+        print("")
         baseline_prefix = os.path.commonprefix(glob.glob(os.path.join(args.baseline, "*.ldscore.gz")))
         annot_prefix = os.path.commonprefix(glob.glob(os.path.join(annot_dir, "*.ldscore.gz")))
         h2_list = list()

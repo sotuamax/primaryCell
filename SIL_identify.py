@@ -32,7 +32,7 @@ import matplotlib.pyplot as plt
 def args_parser():
     '''parser the argument from terminal command'''
     parser=argparse.ArgumentParser(prog = "PROG", formatter_class = argparse.RawDescriptionHelpFormatter, add_help=True, usage="\nSIL.py <input.bedpe> -o <output>")
-    parser.add_argument("loop", help = "input bedpe file (loop interactions)")
+    parser.add_argument("loop", help = "input bedpe/longrange format file (loop interactions)")
     # parser.add_argument("-bam", "--bam", help = "BAM file used to report for signal value at candidate sites.")
     parser.add_argument("-min_interaction", "--min_interaction", type = int, default = 3, help = "minimum interactions for anchor")
     parser.add_argument("-min_dist", "--min_distance", type = int, default = 10000, help = "minimum distance to stitch anchors")

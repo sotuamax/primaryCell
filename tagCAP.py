@@ -141,9 +141,9 @@ def run_process(args, sample_df, current_dir):
         # step 2: alignment 
         sample_dir = sample + date.today().strftime(".%m-%d-%Y")
         if dtype == "cDNA":
-            align_step = f"g_target.py align -dtype {dtype} -fastq {sample_dir}/{sample}_R1.fq {sample_dir}/{sample}_R2.fq -ref {star_ref} -gtf {gtf} -o {sample} -n {args.align_threads}"
+            align_step = f"tag_align.py align -dtype {dtype} -fastq {sample_dir}/{sample}_R1.fq {sample_dir}/{sample}_R2.fq -ref {star_ref} -gtf {gtf} -o {sample} -n {args.align_threads}"
         if dtype == "DNA":
-            align_step = f"g_target.py align -dtype {dtype} -fastq {sample_dir}/{sample}_R1.fq {sample_dir}/{sample}_R2.fq -ref {bwa_ref} -gtf {gtf} -o {sample} -n {args.align_threads}"
+            align_step = f"tag_align.py align -dtype {dtype} -fastq {sample_dir}/{sample}_R1.fq {sample_dir}/{sample}_R2.fq -ref {bwa_ref} -gtf {gtf} -o {sample} -n {args.align_threads}"
         # set up alignment folder 
         if args.align_folder != None:
             align_folder = args.align_folder
@@ -166,7 +166,7 @@ def run_process(args, sample_df, current_dir):
         bed_f = bam_f.replace(".bam", ".bed")
         # step 3: screen alignment file for genes intag
         if os.path.exists(bam_f) and os.path.exists(bed_f):
-            screen_step = f"g_target.py screen -dtype {dtype} -bam {bam_f} -gtf {gtf} -frame {frame[-1]} -o {sample}"
+            screen_step = f"tag_align.py screen -dtype {dtype} -bam {bam_f} -gtf {gtf} -frame {frame[-1]} -o {sample}"
             if args.sc:
                 barcode = "/data/jim4/Seq/CRISPR/data/multiplex.xlsx"
                 screen_step += f" -multiplex {barcode}"

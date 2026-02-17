@@ -16,7 +16,7 @@ def total_counts(cool, resolution):
         total_reads += b.data.sum()
     return total_reads 
 
-def cool_matrix(cool, resolution, region):
+def cool_matrix(cool, resolution, region, balance = False):
     """
     region: tuple (three-element w/ chrom, start, end); 
     resolution: int; 
@@ -26,7 +26,7 @@ def cool_matrix(cool, resolution, region):
         cool_handle = cooler.Cooler(f"{cool}::resolutions/{resolution}")
     else:
         cool_handle = cooler.Cooler(cool)
-    clr_matrix = cool_handle.matrix(balance = False).fetch(region, region)
+    clr_matrix = cool_handle.matrix(balance = balance).fetch(region, region)
     return clr_matrix 
 
 def global_exp(clr_matrix:np.ndarray):

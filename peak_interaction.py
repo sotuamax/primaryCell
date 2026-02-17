@@ -148,6 +148,16 @@ def bin2peak(obs_exp_enrich, peak_df, resolution):
     right_merge.drop(["start", "end"], axis = 1, inplace = True)
     return right_merge
 
+def bedpe(peak_contact):
+    """
+    Docstring for bedpe
+    
+    transfer peak contact txt into bedpe format
+    """
+    peak_contact = peak_contact.copy()
+    peak_contact["name"] = "."
+    return peak_contact[["chrom1", "start1", "end1", "chrom2", "start2", "end2", "name", "obs"]]
+
 def longrange(peak_contact):
     """
     transfer significant contacts into long-range format (chr1 1000 2000 chr1:5000-6000,30)
@@ -311,19 +321,14 @@ def main():
                 score_filter = obs_exp_p["score"] >= args.score
                 # get the filtered peak interactions 
                 obs_exp_filter = obs_exp_p[score_filter & contact_filter].copy()
-                # add enrichment value 
-                # print(datetime.now().strftime("%H:%M:%S") + " - Add enrichment values ...")
-                # try:
-                #     obs_exp_filter["enrichment"] = obs_exp_filter["obs"]/obs_exp_filter[[c for c in obs_exp_filter.columns if c.startswith("exp")]].max(axis = 1)
-                # except Exception as e:
-                #     print(e)
-                #     pass
                 print(datetime.now().strftime("%H:%M:%S") + f" - Write filtered contacts ...")
                 obs_exp_filter.to_csv(output + "_filtered.txt", sep = "\t", header = True, index = False, float_format='%.3e')
                 longrange(obs_exp_filter).to_csv(output + ".longrange", sep = "\t", index = False, header = False)
+                bedpe(obs_exp_filter).to_csv(output + ".bedpe", sep = "\t", index = False, header = False)
                 if args.min_distance > 0:
                     print(datetime.now().strftime("%H:%M:%S") + f" - Filter by minimum distance >= {args.min_distance} ...")
                     longrange(obs_exp_filter.query("end2 - start1 > @args.min_distance")).to_csv(output + f"_{args.min_distance}.longrange", sep = "\t", index = False, header = False)
+                    bedpe(obs_exp_filter.query("end2 - start1 > @args.min_distance")).to_csv(output + f"_{args.min_distance}.bedpe", sep = "\t", index = False, header = False)
                     obs_exp_filter.query("end2 - start1 > @args.min_distance").to_csv(output + f"_filtered_{args.min_distance}.txt", sep = "\t", header = True, index = False, float_format='%.3e')
                 print(datetime.now().strftime("%H:%M:%S") + " - Finished!")
             except Exception as e:

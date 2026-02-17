@@ -29,8 +29,7 @@ def args_parser():
     '''parser the argument from terminal command'''
     parser=argparse.ArgumentParser(prog = "PROG", formatter_class = argparse.RawDescriptionHelpFormatter, description="")
     parser.add_argument("-peaks", "--peaks", nargs = "+", help="peaks file in narrowPeak format (contain summits)")
-    parser.add_argument("-blacklist", "--blacklist", required = False, help = "blacklist region")
-    parser.add_argument("-chrom_only", "--chrom_only", action = "store_true", help = "chromosome only (filter out scaffolds and chrM, chrY)")
+    parser.add_argument("-blacklist", "--blacklist", help = "blacklist region", default = "/data/jim4/data/blacklist/hg38_blacklist_jointed.bed")
     parser.add_argument("-min_dist", "--min_dist", default = 50, type = int, help = "minimum distance for peak summits, used for clustering")
     parser.add_argument("-min_score", "-min_score", default = 0, type = int, help = "minimum score used to filter peaks (10xqValue). ")
     parser.add_argument("-min_fc", "--min_fc", default = 0, type = float, help = "minimum foldchange for peak signal")
@@ -43,25 +42,26 @@ def main():
     args = args_parser()
     peaks = args.peaks
     output= args.output
-    print("Read peaks ...")
-    peak_df = pd.concat([bf.read_table(peak, schema = "narrowPeak") for peak in peaks], axis = 0)
-    print("Total peaks: ", len(peak_df))
     # peak_df.to_csv("test.narrowPeak", header = False, index = False, sep = "\t")
     # exit(1)
-    if args.min_score > 0:
-        print(f"Filtering peaks on minimum score {args.min_score}")
-        peak_df = peak_df.query("score >= @args.min_score").copy()
-        print("Filtered peaks: ", len(peak_df))
-    if args.min_fc > 0:
-        print(f"Filtering peaks on minimum foldchange {args.min_fc}")
-        peak_df = peak_df.query("fc >= @args.min_fc").copy()
-        print("Filtered peaks: ", len(peak_df))
-    if args.chrom_only:
-        from utilities.chrom_func import chrom_arms
-        print("Filtering peaks on chromosome only ...")
-        chroms = sorted(set(chrom_arms()["chrom"]))
-        peak_df = peak_df.query("chrom in @chroms").copy()
-        print("Filtered peaks: ", len(peak_df))
+    peak_list = list()
+    for peak in sorted(peaks):
+        print(f"Read {peak} ...")
+        peak_df = bf.read_table(peak, schema = "narrowPeak")
+        peak_count_raw = len(peak_df)
+        print("Total peaks: ", len(peak_df))
+        if args.min_score > 0 or args.min_fc > 0:
+            from utilities.chrom_func import chrom_size
+            print("Filtering peaks on chromosome only ...")
+            chroms = sorted(set(chrom_size()["chrom"]))
+            print(f"Filtering peaks on minimum score {args.min_score}")
+            peak_df = peak_df.query("(chrom in @chroms) and (score >= @args.min_score or fc >= @args.min_fc)").copy()
+            if len(peak_df) != peak_count_raw:
+                print("Write filtered peak into file ...")
+                peak_df.to_csv(peak.replace(".narrowPeak", "_qc.narrowPeak"), sep = "\t", header = False, index = False)
+            print("Filtered peaks: ", len(peak_df), round(len(peak_df)/peak_count_raw*100, 2))
+        peak_list.append(peak_df)
+    peak_df = pd.concat(peak_list, axis = 0)
     # make sure peaks name are unique
     peak_df["name"] = peak_df["name"].str.split("_peak", expand = True)[0]
     new_peak_df = list()
@@ -136,7 +136,9 @@ def main():
         blacklist_df = bf.read_table(args.blacklist, schema = "bed3")
         clustered_df = rmblacklist(clustered_df_new, blacklist_df)
     # write into output file
-    clustered_df_new[narrowPeak_col].to_csv(output + ".narrowPeak", sep = "\t", header = False, index = False)
+    print(f"Total consensus peaks: {len(clustered_df_new[narrowPeak_col])}")
+    consensus_all = clustered_df_new[narrowPeak_col].copy()
+    consensus_all.to_csv(output + ".narrowPeak", sep = "\t", header = False, index = False)
     if args.saf:
         print("report in SAF & bed format ...")
         saf = clustered_df_new[["name", "chrom", "start", "end"]].copy()
@@ -145,7 +147,20 @@ def main():
         saf["strand"] = "."
         saf[["name", "name_new"]].to_csv(output+".saf.peak", sep = "\t", header = False, index = False)
         saf[["name_new", "chrom", "start", "end", "strand"]].to_csv(output + ".saf", sep = "\t", header = False, index = False)
-        saf[["chrom", "start", "end", "name_new"]].to_csv(output + ".bed", sep = "\t", header = False, index = False) # standard bed4 format
+        saf_new_bed = saf[["chrom", "start", "end", "name_new"]]
+        saf_new_bed.to_csv(output + ".bed", sep = "\t", header = False, index = False) # standard bed4 format
+        saf_new_bed = bf.read_table(output + ".bed", schema = "bed4")
+        for p in args.peaks:
+            print(p)
+            pdf = bf.read_table(p, schema = "narrowPeak")
+            saf_new_bed = bf.overlap(saf_new_bed, pdf, how = "left")
+            saf_new_bed[os.path.basename(p).split("_peaks.narrowPeak")[0]] = np.where(saf_new_bed["chrom_"].isna(), 0, 1)
+            saf_new_bed.drop([c for c in saf_new_bed.columns if c.endswith("_")], axis = 1, inplace = True)
+            saf_new_bed.drop_duplicates(keep = "first", ignore_index = True, inplace = True)
+        saf_new_bed.drop(["chrom", "start", "end"], axis = 1).to_csv(output + "_01.txt", sep = "\t", header = True, index = False)
+        for c in saf_new_bed.columns:
+            saf_new_bed[saf_new_bed[c] == 1][[c]].to_csv(f"{c}_consensus.bed", sep = "\t", header = False, index = False)
+            
 
 if __name__ == "__main__":
     main()

@@ -17,27 +17,17 @@ def args_parser():
     sub_parsers = parser2.add_subparsers(dest = 'command', help = "mode to run")
     # alignment
     align = sub_parsers.add_parser("align", help = "perform alignment", parents = [parser], add_help = False)
-    align.add_argument("-read", "--read", nargs = "+", help="prefix of read file")
+    align.add_argument("-read", "--read", nargs = "+", help="prefix of read file (when gives two reads, perform paired read alignment; when one given, perform single end alignment)")
     align.add_argument("-ref", "--reference", default = "/data/jim4/Reference/human/GRCh38.p14/fasta/GRCh38.primary_assembly.genome.fa", help = "reference genome for alignment")
-    # align.add_argument("-mode", "--mode", choices= ["SE", "PE"], help = "Single-end or Pair-end alignment.", default = "SE")
     # markdup
     markdup = sub_parsers.add_parser("markdup", help = "perform feature count", parents = [parser], add_help = False)
     markdup.add_argument("-bam", "--bam", required = True, help = 'bam alignment file')
-    # markdup.add_argument("-outdir", "--outdir", default = "/data/jim4/Seq/CRISPR/alignment/markdup", help = "directory for markdup bam file")
     # qc 
     qc = sub_parsers.add_parser("qc", help = "QC on BAM file", parents = [parser], add_help = False)
     qc.add_argument("-bam", "--bam", required = True, help = 'bam alignment file')
-    # qc.add_argument("-outdir", "--outdir", default = "/data/jim4/Seq/CRISPR/alignment/QC", help = "directory for QC bam file")
     # transform to bigwig format
     bw = sub_parsers.add_parser("bigwig", help = "transform to bigwig format", parents = [parser], add_help = False)
     bw.add_argument("-bam", "--bam", required = True, help = "bam alignment file")
-    # bw.add_argument("-outdir", "--outdir", default = "/data/jim4/Seq/CRISPR/alignment/bigwig", help = "directory for bigwig file")
-    # generate log file 
-    # log = sub_parsers.add_parser("log", help = "generate log file for each alignment", parents = [parser], add_help = False)
-    # log.add_argument("-sample", "--sample", help = "sample ID")
-    # # log.add_argument("-mode", "--mode", choices= ["SE", "PE"], help = "Single-end or Pair-end alignment.", default = "SE")
-    # log.add_argument("-outdir", "--outdir", default = "/data/jim4/Seq/CRISPR/log", help = "directory for log file")
-    # parse arguments
     args=parser2.parse_args()
     return args
 
@@ -51,12 +41,13 @@ def main():
         read = args.read 
         r1 = " ".join(read)
         # r1 = glob.glob(f"{read}_*R1.fastq.gz")[0]; r2 = glob.glob(f"{read}_*R2.fastq.gz")[0]
-        name = os.path.basename(read[0]).split("_R1")[0]
+        name = os.path.join(args.outdir, os.path.basename(read[0]).split("_R1")[0])
         align_command = f"bwa mem {ref} {r1} -t {n} | samtools view -@ {n} -Su - | samtools sort -@ {n} - -o {name}.bam && samtools index -@ {n} {name}.bam"
         if not os.path.exists(name + ".bam"):
             print("Perform alignment ...")
             subprocess.call(align_command, shell = True)
-        
+        else:
+            print("Alignment file exists!")
         align_stat = f"samtools flagstat -@ {n} {name}.bam -O tsv > {name}.stat"
         if not os.path.exists(name + ".stat"):
             subprocess.call(align_stat, shell=True)
@@ -102,7 +93,6 @@ def main():
         if args.force:
             print("Enforce bigwig ...")
             subprocess.call(bw_command, shell=True)
-    
     # if args.command == "log":
     #     from utilities.parse_log import flagstat_parser_SE, mark_log_parser, flagstat_parser
     #     sample = args.sample 

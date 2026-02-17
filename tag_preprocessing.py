@@ -47,7 +47,8 @@ def main():
     try:
         os.mkdir(output_dir)
         print(f"Create {output_dir}")
-    except:
+    except Exception as e:
+        print(e)
         pass
     sample = args.sample
     log_file = os.path.join(output_dir, sample +".log")
@@ -61,7 +62,7 @@ def main():
     if [r.split("_R1")[0] for r in r1_list] != [r.split("_R2")[0] for r in r2_list]:
         raise IOError("Cannot correctly locate paired R1/R2!")
     from utilities.fastq_tools import fq2df, read_len, read_select, write_read
-    primer_seq = args.primer_seq
+    primer_seq = args.primer_seq.upper()
     if len(r1_list) == 0:
         raise IOError("No R1 data find")
     if rank == 0:
@@ -122,12 +123,14 @@ def main():
             lib_label = lib_comment[0].split(":")[-1]
         lib_content.append(lib_label)
         total_read = len(r1_df)
+        print(f"Total read {total_read}")
         lib_content.append(total_read)
         #pre_fw.write(f'{lib}\t{lib_label}\t{total_read}\t')
         if primer_seq is not None:
             print("Select on primer ...")
             r1_select_df = read_select(r1_df, [primer_seq])
             r1_select_read = len(r1_select_df)
+            print(f"selected {r1_select_read} read")
             lib_content.append(r1_select_read)
             lib_content.append(round(r1_select_read/total_read*100))
             #pre_fw.write(f"{r1_select_read}\t{round(r1_select_read/total_read*100)}\t")
@@ -164,6 +167,7 @@ def main():
         # pre_fw.write(f"{round(len(r1_select_df)/total_read*100)}\n")
         lib_content.append(round(len(r1_select_df)/total_read*100))
         lib_list.append(lib_content)
+        print("Write into new file ...")
         write_read(r1_select_df, output = os.path.join(output_dir, lib + "_R1.fastq.gz"), start=r1_head, end=r1_tail, comment = True)
         write_read(r2_select_df, output = os.path.join(output_dir, lib + "_R2.fastq.gz"), start=r2_head, comment = True)
     lib_list_all = comm.gather(lib_list, root = 0)
@@ -173,19 +177,20 @@ def main():
             for lib in rank:
                 cont = "\t".join([str(l) for l in lib])
                 pre_fw.write(f"{cont}\n")
-        all_r1 = sorted(glob.glob(os.path.join(output_dir, sample + "[0-9][0-9]_R1.fastq.gz")))
-        joint_r1 = " ".join(all_r1)
-        all_r2 = sorted(glob.glob(os.path.join(output_dir, sample + "[0-9][0-9]_R2.fastq.gz")))
-        joint_r2 = " ".join(all_r2)
-        subprocess.call(f"cat {joint_r1} > {os.path.join(output_dir, sample)}_R1.fastq.gz", shell = True)
-        subprocess.call(f"cat {joint_r2} > {os.path.join(output_dir, sample)}_R2.fastq.gz", shell = True)
-        if os.path.exists(os.path.join(output_dir, sample + "_R1.fastq.gz")) and os.path.exists(os.path.join(output_dir, sample + "_R2.fastq.gz")):
-            for rr1 in all_r1:
-                os.remove(rr1)
-            for rr2 in all_r2:
-                os.remove(rr2)
-        print(f"Combined R1/R2 from {len(r1_list)} libraries.")
-        pre_fw.close()
+        if args.prefix:
+            all_r1 = sorted(glob.glob(os.path.join(output_dir, sample + "[0-9][0-9]_R1.fastq.gz")))
+            joint_r1 = " ".join(all_r1)
+            all_r2 = sorted(glob.glob(os.path.join(output_dir, sample + "[0-9][0-9]_R2.fastq.gz")))
+            joint_r2 = " ".join(all_r2)
+            subprocess.call(f"cat {joint_r1} > {os.path.join(output_dir, sample)}_R1.fastq.gz", shell = True)
+            subprocess.call(f"cat {joint_r2} > {os.path.join(output_dir, sample)}_R2.fastq.gz", shell = True)
+            if os.path.exists(os.path.join(output_dir, sample + "_R1.fastq.gz")) and os.path.exists(os.path.join(output_dir, sample + "_R2.fastq.gz")):
+                for rr1 in all_r1:
+                    os.remove(rr1)
+                for rr2 in all_r2:
+                    os.remove(rr2)
+            print(f"Combined R1/R2 from {len(r1_list)} libraries.")
+            pre_fw.close()
 
 if __name__ == "__main__":
     main()

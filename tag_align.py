@@ -90,17 +90,16 @@ def main():
             # check soft-clip side at 5' end for QC 
             qc_bam = bam_file.replace(".bam", ".qc.bam")
             #if not os.path.exists(qc_bam):
-            print("Perform QC ...")
             print(f"Process {bam_file} ...")
             # bamfilter in default, only retain reads on chromosome region (no ChrM/chrY)
             # perform QC on BAM file 
             if not os.path.exists(qc_bam):
+                print("Perform QC ...")
                 bamfilter(bam_file, qc_bam, clip_check=True, threads = n, chrom=True)
                 flagstats(qc_bam, n)
         if args.dedup:
             # enable single-cell deduplicate process
             from utilities.bam_tools import sc_markdup
-            print("Deduplicate on single cell level ...")
             print(f"Process {bam_file} ... ")
             # markdup(bam_file, os.path.join(output_dir, args.sample) + ".dedup")
             # make sure that single cell deduplication is on cell barcode and coordinates and strand
@@ -109,10 +108,11 @@ def main():
             dedup_bam = bam_file.replace(".bam", ".dedup.bam")
             bw = dedup_bam.replace(".bam", ".bw")
             if not os.path.exists(dedup_bam):
+                print("Deduplicate on single cell level ...")
                 sc_markdup(bam_file, dedup_bam, n)
                 flagstats(dedup_bam, n)
-            if not os.path.exists(bw):
-                bam2bw(qc_bam, bw, n)
+            # if not os.path.exists(bw):
+            #     bam2bw(qc_bam, bw, n)
         if args.report:
             bam_file = os.path.join(output_dir, sample + ".dedup.qc.bam")
             if os.path.exists(bam_file):
@@ -249,8 +249,8 @@ def main():
             STAR_SE(align_r1, args.reference, gtf, os.path.join(output_dir, sample), n = n, enable_novel = False)
             flagstats(bam_file, n)
         bw = bam_file.replace(".bam", ".bw")
-        if not os.path.exists(bw):
-            bam2bw(bam_file, bw, n)
+        # if not os.path.exists(bw):
+        #     bam2bw(bam_file, bw, n)
         if args.qc:
             # print("Perform QC on GFP BAM ...")
             # check soft-clip side at 5' end for QC 
@@ -275,8 +275,8 @@ def main():
                 subprocess.call(f"samtools index -@ {n} {qc_bam}", shell = True)
                 flagstats(qc_bam, n)
             bw = qc_bam.replace(".bam", ".bw")
-            if not os.path.exists(bw):
-                bam2bw(qc_bam, bw, n)
+            # if not os.path.exists(bw):
+            #     bam2bw(qc_bam, bw, n)
             qc_bam_handle = pysam.AlignmentFile(qc_bam, "rb", threads = n)
             barcode_dict = dict()
             for read in qc_bam_handle.fetch():
@@ -298,6 +298,7 @@ def main():
             axes[1].set_xlabel("freq")
             plt.savefig(os.path.join(output_dir, sample + "GFP_rna.png"), dpi = 300)
         if args.report: # report the overlap between read and CDS features in bed format 
+            print("report the overlap between read and CDS ...")
             if os.path.exists(os.path.join(output_dir, sample + ".qc.bam")):
                 bam_file = os.path.join(output_dir, sample + ".qc.bam")
             from utilities.gtf_tools import parse_gtf
@@ -340,6 +341,7 @@ def main():
                     i += 1
             print("Finish writing into bed file.")
         if args.fusion:
+            print(f"Identify fusion genes for {sample} ...") # based on report output bed file
             # frame = args.frame
             if os.path.exists(os.path.join(output_dir, sample + ".qc.bam")):
                 bam_file = os.path.join(output_dir, sample + ".qc.bam")

@@ -4,8 +4,6 @@
 - [Consensus](#consensus)
 - [Loops](#loops)
 - [Expression](#expression)
-- [Compartment](#compartment)
-- [Insulation](#insulation)
 - [DHS](#dhs)
 - [Updates](#updates)
 
@@ -17,8 +15,8 @@
   - [?] adapt ABC model for the analysis of loop contact frequencies and expression variation; 
   - [ ] start from differentially expressed genes, and see how the loop interactions vary; 
   - [ ] concerted analysis on variable DHS/loops and enriched motif and TF; 
-  - [ ] examine the quality of loop annotation; 
-  - [ ] add H3K27ac to loop understanding; 
+  - [-] examine the quality of loop annotation; 
+  - [-] add H3K27ac to loop understanding; 
   - [ ] TAD & its relationship with AG loops; 
   - [ ] classify genes into GG-prone, or IG-prone; 
   - [ ] For genes overweighted by GG-loops, check the Gene-gene expression relations; 
@@ -57,7 +55,7 @@ To compare among samples, consistent peaks based on all input peaks are generate
     - base peak file used for consensus peakcall, see `/data/jim4/Seq/primary_cell_project/analysis/DHS/peak`; 
     - fc2.5 (see `/data/jim4/Seq/primary_cell_project/alignment/DNase/peak/QC/fc2.5`)
         - I used "fc2.5" as the final cutoff to call consensus peaks, run: 
-        - `peak_consensus.py -peaks /data/jim4/Seq/primary_cell_project/analysis/DHS/peak/*Peak -min_dist 100 -o DNase_consensus_dist100 -saf`
+        - `peak_consensus.py -peaks /data/jim4/Seq/primary_cell_project/analysis/DHS/peak/*Peak -min_dist 100 -min_fc 3 -o DNase_consensus_dist100 -saf`
           - "-saf": generate saf for featureCount input (see below);
     - featureCount of DNase-seq consensus: 
         - `ml subread`
@@ -80,6 +78,8 @@ To compare among samples, consistent peaks based on all input peaks are generate
         - For small sample size, not follow normality assumption, t.test is not good, and I then used wilcox.test; 
         - for wilcox.test (ranked sum), real value ignored, to add the signal strength, I calculated its score using p-value and mean of signal strength of the cluster; 
         - currently, top 5 k peaks are applied; 
+        - run `group_specific_feature.py -count normalized_count.txt -group sample_group.txt -o group_specific_feature`
+    - enrichment of group specific features with 
 
 - Consensus Hi-TrAC peakcall
     - about consensus:
@@ -93,8 +93,6 @@ To compare among samples, consistent peaks based on all input peaks are generate
     - See `HiTrAC_cluster_bin.bed`
     - binned peaks w/ good resolution can be critical for loop calling (**when multiple anchors merged as one, its significant loops can also be affected**);
     - 
-    
-
 
 - Annotation peaks 
     - Use [homer](http://homer.ucsd.edu/homer/ngs/annotation.html) to annotate peaks directly.  
@@ -222,30 +220,6 @@ To compare among samples, consistent peaks based on all input peaks are generate
     given gene should have columns "symbol";  
     bg or background gene set is optional.
 
-#### Compartment 
-- dchic used for compartment call; 
-  - `mamba activate dchic`
-  - use `dchic_pipe.py`; 
-    - `dchic_pipe.py -cool input.mcool -r 5000 -ref_path /data/jim4/Seq/primary_cell_project/analysis/compartment/data/hg38_goldenpathData/ -o output`
-    - inputs: cool file, resolution, ref (hg38), golden path (if previously downloaded), output prefix 
-- based on experiment run, 10k can be a good resolution (also try 5k); 
-- Analysis between loops and compartment: 
-  - loops are connecting A-A compartment (> 85%), and few percentage are from B-B interaction; 
-- Correlation between Histone modification marks & compartment: 
-  - see `compartment_mark.py`; 
-  - 
-- Gene expression comparison: 
-  - "A" genes: gene completely reside within A; 
-  - "AB" genes: gene across A and B compartment; 
-  - "B" genes: genes completely reside within B; 
-  - global analysis indicated: A genes' expression is significantly higher than AB genes, and all more than B genes (that is genes reside completely within B compartment)
-- 
-
-#### Insulation
-- Consider insulation as the way to segment genome into domains: between domains, the insulation score is greater; 
-- Method: slide a diamond-shape window along the genome (one corner on the diagonal of the matrix), and score for the sum of contacts within the window for each position. At certain location, the score is significantly lower than its surrounding region (reflecting lowered contact frequencies between upstream and downstream loci), this position is referred to as boundary position. 
-- see domain paper [here](https://www.nature.com/articles/nature11082);
-- 
 
 #### DHS 
 - This folder is to store all final processed data for DHS; 

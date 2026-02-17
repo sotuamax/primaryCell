@@ -1,4 +1,13 @@
 #!/usr/bin/env python3
+"""
+SPOT score: signal portion of tags (reads overlap significant peaks - signal reads).
+at bulk cell level, report fraction of reads overlap given peak region (in bed file)
+
+at single cell level, the input BAM files should store cell barcode information, to report fraction of barcode reads overlap given peak regions (in bed file).  
+output (total reads and its overlap read count):
+barcode total overlap overlap_perc 
+
+"""
 import os 
 import subprocess
 import argparse 
@@ -39,6 +48,7 @@ def main():
     if args.expand is not None:
         print(f"Expand bed region by {args.expand} on each side ..")
         bed_df = bf.expand(bed_df, pad = args.expand)
+        bed_df["start"] = np.where(bed_df["start"] < 0, 0, bed_df["start"])
     # for bulk cell level 
     if not args.barcode:
         flagstat_f = bam.replace(".bam", ".flagstat")

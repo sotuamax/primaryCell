@@ -9,6 +9,10 @@ Input:
 
 Output:
     - score matrix (each column match to )
+
+This script is executed within: 
+1. hic_pipe (at QC step); 
+2. 
 """
 import pandas as pd 
 import numpy as np 
@@ -18,7 +22,7 @@ from utilities.misc import timeit
 import time 
 from utilities.misc import ignore_warning
 import bioframe as bf 
-
+import pyBigWig
 ignore_warning()
 
 def args_parser():
@@ -29,12 +33,12 @@ def args_parser():
     parser.add_argument("-scale", choices = ["mm", "bg"], required = False, help = "methods used to scale score ")
     parser.add_argument("-flank", "--flank", required = False, type = int, help = "flanking size centered at bed region midpoint (optional)")
     #parser.add_argument("-filter", "--filter", action = "store_true", help = "when assigned, filter bed input for chromosome")
-    parser.add_argument('-blacklist', "--blacklist", required = False, help = "blacklist region used to filtering on bed file")
+    parser.add_argument("-chrsize", "--chrsize", help = "chromosome sizes", default = "/data/jim4/Reference/human/GRCh38.p14/GRCh38_chrsize.bed")
+    parser.add_argument('-blacklist', "--blacklist", default = "/data/jim4/data/blacklist/hg38_blacklist_jointed.bed", help = "blacklist region used to filtering on bed file")
     parser.add_argument("-step", "--step", required = False, type = int, help = "sample step size within the 2xflanking region")
     parser.add_argument("-min", "--min_coverage", default = 0, type = int, help = "minimum read for a region to be included in the average caculation")
     parser.add_argument("-plot", "--plot", action = "store_true", help = "when assigned, plot the screened region")
-    # parser.add_argument("-p", "--bam_processor", default = 4, type = int, help = "number of processors to use for processing bam file")
-    # parser.add_argument("-TSS", "--TSS", action = "store_true", help = "perform TSS enrichment call. ")
+    parser.add_argument("-start", "--start", action = "store_true", help = "use start position as the center")
     parser.add_argument("-o", "--output", help = "output prefix")
     args=parser.parse_args()
     return args
@@ -77,8 +81,19 @@ def main():
         blacklist_df = bf.read_table(args.blacklist, schema = "bed3")
         from utilities.peak_tools import rmblacklist
         bed_df = rmblacklist(bed_df, blacklist_df)
+    chrsize = pd.read_table(args.chrsize, header = None, names = ["chrom", "size"])
+    if args.start:
+        bed_df["pos"] = bed_df["start"]
+    else:
+        bed_df["pos"] = (bed_df["start"]+bed_df["end"])//2
+    bed_df["upstream"] = bed_df["pos"]-flank
+    bed_df["downstream"] = bed_df["pos"]+flank+step
+    bed_df = pd.merge(bed_df, chrsize[["chrom", "size"]], on = "chrom", how = "inner")
+    # any bed scan interval must within chromosome region (> 0, < chrsize)
+    bed_df = bed_df[(bed_df["upstream"] > 0) & (bed_df["downstream"] < bed_df["size"])]
+    bed_df = bed_df.query("chrom != 'chrY' and chrom != 'chrX'").copy()
+    bed_df[["chrom", "upstream", "downstream"]].to_csv(f"{output}.bed", sep = "\t", header = False, index = False)
     print("Read bigwig file for region score ...")
-    import pyBigWig
     score_handle = pyBigWig.open(bw)
     assert score_handle.isBigWig(), print("input file is not in bigwig format")
     print("Collecting scores at bed surrounding region ...")
@@ -87,18 +102,17 @@ def main():
         if step is not None:
             print(f"Collect score w/ stepsize {step} ...")
             # in the score list (each row is a region segmented by stepsize, each column is a relative position in a flanking range)
-            score_list = [np.array([score_handle.stats(row.chrom, i, i+50)[0] for i in range((row.start+row.end)//2-flank, (row.start+row.end)//2+flank+1, step)]) for row in bed_df.itertuples()]
+            score_list = [np.array([score_handle.stats(row.chrom, i, i+step)[0] for i in range(row.upstream, row.downstream, step)]) for row in bed_df.itertuples()]
         else:
             score_list = [np.array([score_handle.stats(row.chrom, (row.start+row.end)//2-flank, (row.start+row.end)//2+flank+1)[0]]) for row in bed_df.itertuples()]
-        
     else:
         score_list = [np.array([score_handle.stats(row.chrom, row.start, row.end)]) for row in bed_df.itertuples()]
     score_mat = np.vstack(score_list)
-    score_mat = np.where(score_mat == None, 0, score_mat).astype(float)
+    score_mat = np.where(score_mat == None, 0.00, score_mat).astype(float)
     print("All positions collected!")
     assert score_mat.shape[0] == len(bed_df), print("score dimension is not match to bed file")
     print("Save score to a file ...")
-    np.savetxt(output + ".mtx", score_mat, delimiter = "\t", fmt = "%d")
+    np.savetxt(output + ".mtx", score_mat, delimiter = "\t", fmt = "%.2f")
     if min_cnt != 0:
         print(f"Filter score on minimum count {min_cnt} ...")
         score_mat = score_mat[~np.all(score_mat <= min_cnt, axis = 1)]
@@ -108,19 +122,18 @@ def main():
     if args.scale == "bg":
         print("Perform background sclae on signal ...")
         score_mat = scale_bg(score_mat)
-    if args.scale is not None:
-        print("After scaling, to calculate the signal score between midpoint and background ...")
-        score_mean = pd.DataFrame(score_mat.mean(axis = 0), columns = ["signal"])
-        signal_arr = np.array(score_mean["signal"])
-        score_mean["pos"] = range(-len(signal_arr)//2*step, len(signal_arr)//2*step, step)
-        score_mean[['pos', "signal"]].to_csv(output + "_mean.txt", sep = "\t", header = True, index = False)
-        # bg_score = (score_filtered[:, 0:10].mean() + score_filtered[:, -10:-1].mean())/2
-        # center_score = score_filtered[:, score_filtered.shape[-1]//2].mean()
-        #enrich_value = center_score/bg_score
-        #print(f"Enrichment score: {enrich_value}")
-        with open(output+".stat", "w") as fw:
-            enrich_value = signal_arr[len(signal_arr)//2-1:len(signal_arr)//2+1].mean()/((signal_arr[:5].mean() + signal_arr[-5:].mean())/2)
-            fw.write(f"enrich\t{score_mat.shape[0]}\t{enrich_value}\n")
+    print("After scaling, to calculate the signal score between midpoint and background ...")
+    score_mean = pd.DataFrame(score_mat.mean(axis = 0), columns = ["signal"])
+    signal_arr = np.array(score_mean["signal"])
+    score_mean["pos"] = range(-flank, flank+step, step)
+    score_mean[['pos', "signal"]].to_csv(output + "_mean.txt", sep = "\t", header = True, index = False)
+    # bg_score = (score_filtered[:, 0:10].mean() + score_filtered[:, -10:-1].mean())/2
+    # center_score = score_filtered[:, score_filtered.shape[-1]//2].mean()
+    #enrich_value = center_score/bg_score
+    #print(f"Enrichment score: {enrich_value}")
+    with open(output+".stat", "w") as fw:
+        enrich_value = signal_arr[len(signal_arr)//2-1:len(signal_arr)//2+1].mean()/((signal_arr[:5].mean() + signal_arr[-5:].mean())/2)
+        fw.write(f"enrich\t{score_mat.shape[0]}\t{enrich_value}\n")
         #print('Write scores into csv!')
         # np.savetxt(output + ".csv", score_stack, delimiter = ",")
         # score_stack = score_stack[~np.isnan(score_stack).any(axis = 1), :]
@@ -167,7 +180,7 @@ def main():
         import matplotlib.pyplot as plt 
         #fig, axis = plt.subplots(1,1)
         plt.plot(score_mean["pos"], score_mean["signal"])
-        plt.scatter(score_mean["pos"], score_mean["signal"])
+        #plt.scatter(score_mean["pos"], score_mean["signal"])
         # axis.axvline(x = 0, ymin = score_df["scaled_coverage_mean"].min(), ymax = score_df["scaled_coverage_mean"].max(), linestype = "--", size = 0.5, )
         # tick_break = int(200/step)
         # axis.set_xticks(np.array(score_df.index[::tick_break]))

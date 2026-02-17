@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Given bed file, to evaluate the enrichment of center bed against its surrounding regions. 
+Given bed file and BAM file, to evaluate reads overlapping bed region at single cell level or bulk cell level. 
 """
 import pandas as pd 
 import numpy as np 

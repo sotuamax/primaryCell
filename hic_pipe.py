@@ -28,6 +28,7 @@ def args_parser():
     process = sub_parsers.add_parser("process", help = "process sample data", parents = [parser], add_help = False)
     process.add_argument("-dir", "--directory", help = "directory where to find the fastq data")
     process.add_argument("-n", "--thread", help = "thread number (default: 4)", default = 4, type = int)
+    process.add_argument("-f", "--force", action = "store_true", help = "force to rerun if when output file already exists!")
     summary = sub_parsers.add_parser("summary", help = "generate summary report", parents = [parser], add_help = False)
     args = parser2.parse_args()
     return args
@@ -75,17 +76,17 @@ def format_excel(out, sample_report):
             if row.align_ratio < 0.8:
                 "low quality aligned"
                 worksheet.write(row.Index + 1, col_list.index("align_ratio"), sample_report.iloc[row.Index, col_list.index("align_ratio")], bg_format_low)
-            if row.dup_yield < 0.4: 
+            if row.dup_rate > 0.6: 
                 "high duplication"
-                worksheet.write(row.Index + 1, col_list.index("dup_yield"), sample_report.iloc[row.Index, col_list.index("dup_yield")], bg_format_low)
+                worksheet.write(row.Index + 1, col_list.index("dup_rate"), sample_report.iloc[row.Index, col_list.index("dup_rate")], bg_format_low)
             if row.cis_yield < 0.5:
                 "low cis"
                 worksheet.write(row.Index + 1, col_list.index("cis_yield"), sample_report.iloc[row.Index, col_list.index("cis_yield")], bg_format_low)
-            if row.cis_valid_yield < 0.15:
-                "low cis with long distance"
-                worksheet.write(row.Index + 1, col_list.index("cis_valid_yield"), sample_report.iloc[row.Index, col_list.index("cis_valid_yield")], bg_format_low)
-            if row.enrich < 1.25:
-                worksheet.write(row.Index + 1, col_list.index("enrich"), sample_report.iloc[row.Index, col_list.index("enrich")], bg_format_low)
+            # if row.cis_valid_yield < 0.15:
+            #     "low cis with long distance"
+            #     worksheet.write(row.Index + 1, col_list.index("cis_valid_yield"), sample_report.iloc[row.Index, col_list.index("cis_valid_yield")], bg_format_low)
+            # if row.enrich < 1.25:
+            #     worksheet.write(row.Index + 1, col_list.index("enrich"), sample_report.iloc[row.Index, col_list.index("enrich")], bg_format_low)
 
 def main():
     args = args_parser()
@@ -97,15 +98,22 @@ def main():
         jlist = list()
         for row in sample_df.itertuples():
             logf = os.path.join(log_dir, f"{row.id}.log")
-            with open(logf, "r") as logj:
-                jdict = json.load(logj)
-                jdf = pd.DataFrame.from_dict(jdict, orient = "index")
-                jlist.append(jdf)
+            try:
+                with open(logf, "r") as logj:
+                    jdict = json.load(logj)
+                    jdf = pd.DataFrame.from_dict(jdict, orient = "index")
+                    jlist.append(jdf)
+            except Exception as e:
+                print(e)
         sample_report = pd.concat(jlist, axis = 1).transpose()
         sample_report = pd.merge(sample_df, sample_report, left_on = "id", right_on = "ID").drop("ID", axis = 1)
         short_col = [c for c in sample_report.columns if "short_distance" in c][0]
-        sample_report["final_yield(long_distance_PETs/total_reads)"] = (sample_report["cis"]-sample_report[short_col])/sample_report["total_reads"]*100
+        sample_report["final_usable_PETs"] = sample_report["cis"] - sample_report["short_distance (<1 kb)"]
+        sample_report["final_yield%(long_distance_PETs/total_reads)"] = (sample_report["cis"]-sample_report[short_col])/sample_report["total_reads"]*100
         out = args.sample.replace(".xlsx", "_report.xlsx")
+        sample_report.drop(["total", "pass_markdup_reads", "short_distance (<1 kb)"], axis = 1, inplace = True)
+        # with pd.ExcelWriter(out, mode = "w") as writer:
+        #     sample_report.to_excel(writer, index = False, sheet_name = "Sheet1")
         format_excel(out, sample_report)
     if args.mode == "process":
         dir = args.directory
@@ -140,16 +148,16 @@ def main():
             # subprocess.call(name_sort, shell = True)
             log_command = f"hic_align.py log -id {row.id}"
             # subprocess.call(log_command, shell = True)
-            if not os.path.exists(qc_read + "_R1.fastq.gz") and not os.path.exists(qc_read + "_R2.fastq.gz"):
+            if args.force or (not os.path.exists(qc_read + "_R1.fastq.gz") and not os.path.exists(qc_read + "_R2.fastq.gz")):
                 print(pre_step)
                 subprocess.call(pre_step, shell = True)
-            if not os.path.exists(align_bam):
+            if args.force or  (not os.path.exists(align_bam)):
                 print(align_step)
                 subprocess.call(align_step, shell = True)
-            if not os.path.exists(mark_bam):
+            if args.force or (not os.path.exists(mark_bam)):
                 print(mark_step)
                 subprocess.call(mark_step, shell = True)
-            if not os.path.exists(qc_bam) or not os.path.exists(qc_bam.replace(".bam", ".stat")):
+            if args.force or (not os.path.exists(qc_bam) or not os.path.exists(qc_bam.replace(".bam", ".stat"))):
                 print(qc_step)
                 subprocess.call(qc_step, shell = True)
             subprocess.call(name_sort, shell = True)

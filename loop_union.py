@@ -1,3 +1,11 @@
+#!/usr/bin/env python3
+"""
+Docstring for loop_union
+Given multiple loops files, and join all loops by chromosome positions. 
+
+Report loop contact (count) when requested. 
+
+"""
 from utilities.bed_tools import open_loop
 import pandas as pd 
 import os 
@@ -7,8 +15,10 @@ import argparse
 
 def args_parser():
     '''parser the argument from terminal command'''
-    parser=argparse.ArgumentParser(prog = "PROG", formatter_class = argparse.RawDescriptionHelpFormatter, add_help=True, usage="\nSIL.py <input.bedpe> -o <output>")
-    parser.add_argument("loop", help = "input bedpe file (loop interactions)")
+    parser=argparse.ArgumentParser(prog = "PROG", formatter_class = argparse.RawDescriptionHelpFormatter, add_help=True, usage="")
+    parser.add_argument("-loops", "--loops", nargs = "+", help = "input bedpe file (loop interactions)")
+    parser.add_argument("-count", "--count", action = "store_true", help = "add count data into loop file")
+    parser.add_argument("-o", "--output", help = "output file prefix name")
     args=parser.parse_args()
     return args
 
@@ -31,11 +41,26 @@ def group_fun(df):
 
 def main():
     args = args_parser()
-    file = args.loop
-    loop_df = open_loop(file)
-    loop_df["bin1"] = loop_df["start1"]//1000
-    loop_df["bin2"] = loop_df["start2"]//1000 
-    loop_connect = pd.DataFrame(list(zip(loop_df["chrom1"], loop_df["bin1"], loop_df["bin2"])), columns = ["chrom", "bin1", "bin2"])
-    for chr, chr_sub in loop_connect.groupby("chrom"):
-        chr_group = group_fun(chr_sub.sort_values(["bin1", "bin2"]))
-        chr_sub["group"] = chr_group
+    loop_files = args.loops
+    all_loop = list()
+    for file in loop_files:
+        print(f"Read {file} ...")
+        loop_df = open_loop(file)
+        if args.count:
+            loop_df.rename(columns = {"contact":os.path.basename(file).split("_")[0]}, inplace = True)
+        else:
+            try:
+                loop_df.drop("contact", axis = 1, inplace = True)
+            except:
+                pass 
+        all_loop.append(loop_df.set_index(["chrom1", "start1", "end1", "chrom2", "start2", "end2"]))
+    print("Join all loops ...")
+    all_loop_join = all_loop[0].join(all_loop[1:], how = "outer")
+    all_loop_join = all_loop_join.fillna(0)
+    all_loop_join.reset_index(inplace = True)
+    all_loop_join.index = all_loop_join["chrom1"].astype(str) + ":" + all_loop_join["start1"].astype(str) + "-" + all_loop_join["end1"].astype(str) + "|" + all_loop_join["chrom2"].astype(str) + ":" + all_loop_join["start2"].astype(str) + "-" + all_loop_join["end2"].astype(str)
+    all_loop_join.drop(["chrom1", "start1", "end1", "chrom2", "start2", "end2"], axis = 1, inplace = True)
+    all_loop_join.to_csv(f"{args.output}.txt", sep = "\t", header = True, index = True)
+
+if __name__ == "__main__":
+    main()

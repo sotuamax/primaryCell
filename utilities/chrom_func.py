@@ -1,6 +1,19 @@
 import bioframe as bf
 import pandas as pd 
 
+def chrom_size(ref = "hg38", filter = True):
+    """
+    Docstring for chrom_size
+    To get chromosome size for a reference genome.
+    :param ref: reference genome 
+    :param filter: if remove chrY and chrM
+    """
+    ref_chrsize = bf.fetch_chromsizes(ref)
+    ref_chrsize = pd.DataFrame.from_dict({"chrom":ref_chrsize.index, "start":([0]*len(ref_chrsize)), "end":ref_chrsize.values})
+    if filter:
+        ref_chrsize = ref_chrsize.query("chrom != 'chrM' and chrom != 'chrY'").copy()
+    return ref_chrsize
+
 def chrom_arms(ref = "hg38", filter = True):
     """
     Retrive chromosome arms for a given reference genome

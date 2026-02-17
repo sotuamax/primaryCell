@@ -16,8 +16,8 @@ def parse_gtf(gtf, feature = "gene", ENCODE = True):
     if ENCODE:
         # collection all CDS (its coordinates, strand, and frame)
         if feature.upper() == "EXON":
-            gtf_list = [(g.contig, g.start, g.end, g.frame, g.transcript_id, g.gene_id, g.gene_name, g.strand) for g in gtf_handle.fetch() if g.feature.upper() == feature.upper()]
-            gtf_df = pd.DataFrame(gtf_list, columns = ["chrom", "start", "end", "frame", "transcript", "gene", "symbol", "strand"])
+            gtf_list = [(g.contig, g.start, g.end,  g.exon_id, g.transcript_id, g.gene_id, g.gene_name,  g.gene_type, g.strand) for g in gtf_handle.fetch() if g.feature.upper() == feature.upper()]
+            gtf_df = pd.DataFrame(gtf_list, columns = ["chrom", "start", "end", "exon", "transcript", "gene", "symbol",  "feature", "strand"])
         if feature.upper() == "CDS":
             gtf_list = [(g.contig, g.start, g.end, g.frame, g.transcript_id, g.gene_id, g.gene_name, g.strand) for g in gtf_handle.fetch() if g.feature.upper() == feature.upper()]
             gtf_df = pd.DataFrame(gtf_list, columns = ["chrom", "start", "end", "frame", "transcript", "gene", "symbol", "strand"])
@@ -30,9 +30,14 @@ def parse_gtf(gtf, feature = "gene", ENCODE = True):
         if feature.upper() == "STOP":
             pass
     else:
+        refseq = bf.assembly_info("hg38"); seq_df = pd.DataFrame.from_dict(refseq.alias_dict, orient="index").reset_index(); seq_df.columns = ["chrom", "name"]; 
         if feature.upper() == "TRANSCRIPT":
             gtf_list = [(g.contig, g.start, g.end, g.transcript_id, g.gene_id, g.gbkey, g.strand, g.gene, g.product) for g in gtf_handle.fetch() if g.feature.upper() == feature.upper()]
             gtf_df = pd.DataFrame(gtf_list, columns = ["chrom", "start", "end", "transcript", "gene", "type", "strand", "symbol", "product"])
+        if feature.upper() == "EXON":
+            gtf_list = [(g.contig, g.start, g.end,  g.transcript_id, g.gene_id, g.gene, g.product, g.strand) for g in gtf_handle.fetch() if g.feature.upper() == feature.upper()]
+            gtf_df = pd.DataFrame(gtf_list, columns = ["chrom", "start", "end", "transcript", "gene", "symbol", "product", "strand"])
+        gtf_df = pd.merge(seq_df, gtf_df, on = "chrom", how = "right"); gtf_df.drop("chrom", axis = 1, inplace = True); gtf_df.rename(columns = {"name":"chrom"}, inplace = True)
     return gtf_df
 
 def protein_coding(gtf, out):

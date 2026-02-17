@@ -2,7 +2,7 @@
 
 
 """
-
+Enrichment is foldchange between the center vs. surrounding region.
 """
 
 import pandas as pd 
@@ -25,7 +25,7 @@ def args_parser():
     parser.add_argument("-bam", "--bam", help = "bam file with barcode data available.")
     # parser.add_argument("-barcode", "--barcode", action = "store_true", help = "cell barcode used to generate matrix")
     # parser.add_argument("-gene", "--gene", help = "gene set used to filter barcode (symbol, set)")
-    parser.add_argument("-tag", "--tag", help = "GFP tag gene with matched barcode (barcode, symbol)")
+    parser.add_argument("-tag", "--tag", help = "GFP tag gene with matched barcode for ChiC reads (barcode, symbol)")
     parser.add_argument("-output", "--output", help="output file")
     parser.add_argument("-n", "--threads", type = int, default = 1, help = "threads used to process bam file")
     args = parser.parse_args()
@@ -109,7 +109,6 @@ def main():
     bc_enrich_df = pd.DataFrame(bc_list, columns=["barcode", "score"])
     bc_enrich_df = pd.merge(tag_df, bc_enrich_df, on = "barcode")
     bc_enrich_df.to_csv(output + ".score", sep = "\t", header = True, index = False)
-    exit(0)
     bc_score_list = list()
     for bc in tag_barcode:
         bc_c = pd.DataFrame(count_df[bc].tolist(), columns = ['up', "mid", "down"])

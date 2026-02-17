@@ -54,14 +54,14 @@ def args_parser():
     # preprocessing step
     pre = sub_parsers.add_parser("pre", help = "preprocessing reads with adpater", parents = [parser])
     pre.add_argument("-read", "--read", help="read name to preprocessing (must be correctly compressed by gzip). ")
-    #pre.add_argument("-readdir", "--readdir", default = "/data/jim4/Seq/primary_cell_project/fastq/softname/HiTrAC", required = False, help = "read directory")
+    
     pre.add_argument("-outdir", "--outdir", default = "/data/jim4/Seq/primary_cell_project/fastq/QC/HiTrAC", required = False, help = "output directory")
     pre.add_argument("-adapter", "--adapter", default = "/data/jim4/Seq/primary_cell_project/data/linker.fa", required = False, help = "adapter fasta file")
     # alignment step
     align = sub_parsers.add_parser("align", help = "align cleaned reads to reference genome", parents = [parser])
     align.add_argument("-ref", "--reference", required = False, default = "/data/jim4/Reference/human/GRCh38.p14/fasta/GRCh38.primary_assembly.genome.fa", help = "reference genome for alignment")
     align.add_argument("-read", "--read", help = "read name for alignment")
-    #align.add_argument("-readdir", "--readdir", default = "/data/jim4/Seq/primary_cell_project/fastq/QC/HiTrAC", required = False, help = "read directory")
+    
     align.add_argument("-outdir", "--outdir", default = "/data/jim4/Seq/primary_cell_project/alignment/HiTrAC/raw/individual", required = False, help = "output directory")
     # markdup step
     markdup = sub_parsers.add_parser("markdup", help = "markduplicates of alignment file", parents = [parser])
@@ -107,16 +107,14 @@ def main():
         name = os.path.join(outdir, os.path.basename(read))
         r1_qc = name + "_R1.fastq.gz"
         r2_qc = name + "_R2.fastq.gz"
-        if os.path.exists(r1_qc) and os.path.exists(r2_qc):
-            exit(0)
-        else:
-            print("Preprocessing fastq file ...")
-            print(f"fastp run w/ {n} threads")
-            command = f"fastp -i {r1[0]} -I {r2[0]} -o {r1_qc} -O {r2_qc} --detect_adapter_for_pe --adapter_fasta {linker} --thread {n} --json {name}.json --html {name}.html -5 -W 1 &> {name}.log"
-            print(command)
-            subprocess.call(command, shell = True)
-            subprocess.call(f"cat {name}.log", shell = True)
-            print("Preprocessing finished!")
+        fastp_n = 16 if n > 16 else n
+        print("Preprocessing fastq file ...")
+        print(f"fastp run w/ {n} threads")
+        command = f"fastp -i {r1[0]} -I {r2[0]} -o {r1_qc} -O {r2_qc} --detect_adapter_for_pe --adapter_fasta {linker} --thread {fastp_n} --json {name}.json --html {name}.html -5 -W 1 &> {name}.log"
+        print(command)
+        subprocess.call(command, shell = True)
+        subprocess.call(f"cat {name}.log", shell = True)
+        print("Preprocessing finished!")
         # log_info = fastp_log_parser(name+".log")
         # logging.info(f"Input read\t{log_info[0]}")
         # logging.info(f"QC read\t{log_info[2]}/({round(log_info[2]/log_info[0]*100, 2)}%)")
@@ -135,39 +133,30 @@ def main():
         ref = args.reference 
         align_dir = args.outdir
         name = os.path.join(align_dir, os.path.basename(read))
-        if not os.path.exists(name + ".bam.bai"):
-            print("Perform alignment ...")
-            print(f"BWA run w/ {n} threads")
-            align_command = f"bwa mem -5SP {ref} {r1[0]} {r2[0]} -t {n} | samtools view -@ {n} -Su - | samtools sort -@ {n} - -o {name}.bam && samtools index -@ {n} {name}.bam"
-            print(align_command)
-            subprocess.call(align_command, shell = True)
-            print("Alignment finished!")
+        print("Perform alignment ...")
+        print(f"BWA run w/ {n} threads")
+        align_command = f"bwa mem -5SP {ref} {r1[0]} {r2[0]} -t {n} | samtools view -@ {n} -Su - | samtools sort -@ {n} - -o {name}.bam && samtools index -@ {n} {name}.bam"
+        print(align_command)
+        subprocess.call(align_command, shell = True)
+        print("Alignment finished!")
         align_stat_out = name + ".stat"
-        if not os.path.exists(align_stat_out) and os.path.exists(name + ".bam"):
-            print("Generate alignment stat ...")
-            align_stat = f"samtools flagstat -@ {n} {name}.bam > {align_stat_out}"
-            subprocess.call(align_stat, shell = True)
-        if os.path.exists(name + ".bam") and os.path.exists(name + ".bam.bai") and os.path.exists(name + ".stat"):
-            exit(0)
-        else:
-            exit(1)
+        print("Generate alignment stat ...")
+        align_stat = f"samtools flagstat -@ {n} {name}.bam > {align_stat_out}"
+        subprocess.call(align_stat, shell = True)
+        
     if args.command == "markdup": # log file written by picard ()
         bam = args.bam 
         markdir = args.outdir 
         name = os.path.join(os.path.join(markdir, os.path.basename(bam)))
-        if not os.path.exists(name):
-            print("Markdup on BAM ...")
-            picard="/usr/local/apps/picard/3.1.0/picard.jar"
-            metric = name.replace(".bam", ".txt")
-            # picard markdup requires bam sorted by chromosome coordinates 
-            markdup_command = f"java -Xmx20g -jar {picard} MarkDuplicates -I {bam} -O {name} -M {metric} --REMOVE_DUPLICATES true && samtools index -@ {n} {name}"
-            print(markdup_command)
-            subprocess.call(markdup_command, shell = True)
-            print("Markdup finished!")
-        if os.path.exists(name) and os.path.exists(name.replace(".bam", ".txt")):
-            exit(0)
-        else:
-            exit(1)
+        print("Markdup on BAM ...")
+        picard="/usr/local/apps/picard/3.1.0/picard.jar"
+        metric = name.replace(".bam", ".txt")
+        # picard markdup requires bam sorted by chromosome coordinates 
+        markdup_command = f"java -Xmx20g -jar {picard} MarkDuplicates -I {bam} -O {name} -M {metric} --REMOVE_DUPLICATES true && samtools index -@ {n} {name}"
+        print(markdup_command)
+        subprocess.call(markdup_command, shell = True)
+        print("Markdup finished!")
+        
         # paired_read, dup_rate = mark_log_parser(name.replace(".bam", ".txt"))
         # logging.info(f"Aligned read\t{paired_read}")
         # logging.info("#### Mark duplicates .....")
@@ -180,57 +169,50 @@ def main():
         qc_cutoff = args.min_quality
         name = os.path.join(qcdir, os.path.basename(bam))
         chrsize = pd.read_table("/data/jim4/Reference/human/GRCh38.p14/GRCh38_chrsize.bed", sep = "\t", header = None, names = ["chrom", "size"])
+        
+        print("Perform QC on BAM file ...")
+        chroms = " ".join(chrsize["chrom"].tolist())
+        # -q for mapping-quality 
+        # -F flag (2316)
+        # given chrom to only keep reads on chroms 
+        qc_command = f"samtools view -@ {n} -h -q {qc_cutoff} -F 2316 -b -o {name} {bam} {chroms} && samtools index -@ {n} {name}"
         if not os.path.exists(name):
-            print("Perform QC on BAM file ...")
-            chroms = " ".join(chrsize["chrom"].tolist())
-            # -q for mapping-quality 
-            # -F flag (2316)
-            # given chrom to only keep reads on chroms 
-            qc_command = f"samtools view -@ {n} -h -q {qc_cutoff} -F 2316 -b -o {name} {bam} {chroms} && samtools index -@ {n} {name}"
             print(qc_command)
             subprocess.call(qc_command, shell = True)
         bw = name.replace(".bam", ".bw")
+        bw_command = f"bamCoverage -b {name} -o {bw} -of bigwig -p {n} --normalizeUsing CPM"
         if not os.path.exists(bw):
-            bw_command = f"bamCoverage -b {name} -o {bw} -of bigwig -p {n} --normalizeUsing CPM"
             subprocess.call(bw_command, shell=True)
         enrich_log = name.replace(".bam", ".stat")
-        if not os.path.exists(enrich_log):
-            hg38_TSS = "/data/jim4/Reference/human/GRCh38.p14/GRCh38_TSS.bed"
-            # bw = f"/data/jim4/Seq/primary_cell_project/alignment/HiTrAC/QC/individual/{id}.bw"
-            enrich_score = bw.replace(".bw", "")
-            bw_enrich_command = f"bed_profile.py -flank 1000 {hg38_TSS} {bw} -o {enrich_score}"
-            subprocess.call(bw_enrich_command, shell=True)
-        if os.path.exists(name) and os.path.exists(bw) and os.path.exists(enrich_log):
-            exit(0)
-        else:
-            exit(1)
+        hg38_TSS = "/data/jim4/Reference/human/GRCh38.p14/GRCh38_TSS.bed"
+        enrich_score = bw.replace(".bw", "")
+        # update on bed_profile command line (11/27/25)
+        bw_enrich_command = f"bed_profile.py -flank 1000 -step 50 {hg38_TSS} {bw} -o {enrich_score}"
+        subprocess.call(bw_enrich_command, shell=True)
     if args.command == "nsort":
         bam = args.bam
         sortdir = args.outdir 
         name = os.path.join(sortdir, os.path.basename(bam))
-        if os.path.exists(name.replace(".bam", ".json")):
-            exit(0)
+        
         from utilities.bam_tools import examine_sort
         bed = name.replace(".bam", ".bedpe")
-        if examine_sort(bam) == "coordinate" and not os.path.exists(name):
-            sort_command = f"samtools sort -@ {n} -n {bam} | bedtools bamtobed -bedpe -i stdin > {bed}"
+        nbam = name.replace(".bam", ".n.bam")
+        if examine_sort(bam) == "coordinate":
+            sort_command = f"samtools sort -@ {n} -n {bam} -o {nbam} && bedtools bamtobed -bedpe -i {nbam} > {bed}"
             print(sort_command)
-            subprocess.call(sort_command, shell = True)
+            if not os.path.exists(nbam):
+                subprocess.call(sort_command, shell = True)
             # get a small set of data and guess the column info
         qc_json = name.replace(".bam", ".json")
         ## report cis/trans yield 
         import json
-        if not os.path.exists(qc_json):
-            # final_log
-            from utilities.bed_tools import cis_trans_bed
-            log_dict = cis_trans_bed(bed)
-            with open(qc_json, "w") as ff:
-                json.dump(log_dict, ff)
+        from utilities.bed_tools import cis_trans_bed
+        log_dict = cis_trans_bed(bed)
+        with open(qc_json, "w") as ff:
+            json.dump(log_dict, ff)
         ## check output
     if args.command == "log": # parse log file 
         id = args.id
-        if os.path.exists(f"/data/jim4/Seq/primary_cell_project/alignment/HiTrAC/log/{id}.log"):
-            exit(0)
         from utilities.parse_log import fastp_log_parser, flagstat_parser, mark_log_parser
         id_dict = {"ID":id}
         fastp_log = fastp_log_parser(f"/data/jim4/Seq/primary_cell_project/fastq/QC/HiTrAC/{id}.log")

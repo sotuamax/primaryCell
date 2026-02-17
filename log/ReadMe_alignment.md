@@ -118,6 +118,8 @@
   - `hic_align.py markdup`;
   - `hic_align.py qc`;
   - `hic_format.py <bam> -o <out> -n 12`;
+- all steps combined into one: 
+  - `hic_pipe.py $sample`
 
 - bed: 
   * stores "bedpe" file generated using bedtools from **clean BAM** 
@@ -168,7 +170,7 @@
 - refer to [here](https://github.com/macs3-project/MACS/discussions/435) about its setting; 
 - Generated using MACS3 with "--nomodel" setting 
   * For DNase-seq: 
-  `macs3 callpeak -q 0.01 --keep-dup all -g hs -t input.bed -f BED --nomodel --shift -100 --extsize 200 --outdir . -n output_name`
+  `macs3 callpeak -q 0.01 --keep-dup all -g hs -t input.bed -f BED --nomodel --shift -50 --extension 100 --outdir . -n output_name`
     * see "raw" for peaks called using all samples combined BED; 
     * see "peak_w_good_sample" for peaks called using good samples; 
     * see "noblacklist" for peaks that filtered out peaks overlapping blacklist region (based on peaks generated using combined good sample BED files); 
@@ -233,14 +235,30 @@ It is noticable that "pairtools parse" behaves different from my default thought
 Although this default setting of pairtools may cause some lossing of information, it helps retain high-quality PETs for downstream analysis. 
 I thus proceeded with "pairtools parse".
 
+- for each bio-replicate, I need to generate one pairs file. 
+  - about UU in pairs. when sequence long enough, one read can align part on pos1, and another part contributed by a distal pos2. So the defaut "pairtools parse" handle "S" - softclipping may be problematic. 
+  - I then tested on nSAEC_GC7611077k, total PETs in bedpe: 6102157; report pairs file filtering on "UU": 6078006 (> 99% retained); 
+  - this suggests using pairtools parse and filtering on "pair_type=UU" works good for now. 
+  - about the "@PG" header issue in BAM to pairs transformation: @PG header can be removed. 
+
+
 - Trace the progress of Hi-TrAC libraries
 - 02/13/2025: I used three metrics (see above), including SPOT score, TSS enrichment, and distant cis PETs ratio, to set cutoffs for good quality libraries. 
     Up to now, samples comparable for downstream analysis: 
     - nUVECp
     - nCAEC
     - nCASMC
-
-
+- up to 11/28/2025, to add:
+  - nAEC
+  - nPASMC
+  - nEKn 
+  - nSAEC
+  - nASMC
+  - nDFn
+  - nBTSMC
+  - nGK 
+  - cSAEC 
+  - 
 #### Important update 
 - correlation analysis indicated poor correlation of "nUVEC_1_GC4703735" versus other samples. 
 I then dropped "nUVEC_1_GC4703735" (DNase-seq). 

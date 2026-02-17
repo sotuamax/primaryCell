@@ -8,7 +8,7 @@ def bw_value(bw:str, bed:pd.DataFrame, step:int):
     bed: bed df to indicate regions to scan for score
     step: step size used to scan a region 
     Return: 
-
+    mean score over bed regions with a stepsize as fixed value.  
     """
     bw_handle = pyBigWig.open(bw, "r")
     # the default stats is the average value over a range 

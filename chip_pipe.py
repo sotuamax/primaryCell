@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+"""
+it execute steps in chip_align.py 
+
+"""
 import argparse
 import pandas as pd 
 import os 
@@ -16,7 +20,7 @@ def args_parser():
     # process.add_argument("-f", "--force", action = "store_true", help = "force regenerate alignment file even exists")
     process.add_argument("-ref", "--reference", required = False, help = "reference genome to use")
     process.add_argument("-n", "--thread", help = "thread number (default: 4)", default = 4, type = int)
-    # process.add_argument("-m", "--m", choices=["SE", "PE"], help = "read alignment mode in SE/PE")
+    process.add_argument("-m", "--m", choices= ["SE", "PE"], help = "Single-end or Pair-end alignment.", default = "SE")
     summary = sub_parsers.add_parser("summary", help = "generate summary report", parents = [parser], add_help = False)
     summary.add_argument("-outdir", "--outdir", required = False, help = "output directory")
     args = parser2.parse_args()
@@ -34,7 +38,6 @@ def read_df(table):
 def main():
     args = args_parser()
     sample_df = read_df(args.sample)
-    print(args.mode)
     # process samples 
     if args.mode == "summary": 
         from utilities.parse_log import mark_log_parser, flagstat_tsv_parse 
@@ -53,23 +56,26 @@ def main():
         sample_report["aligned_ratio"] = round(sample_report["aligned"].astype(int)/sample_report["total"].astype(int), 2)
         with pd.ExcelWriter(out, mode = "w") as writer:
             sample_report[["sample", "total", "aligned", "aligned_ratio", "dup_rate"]].to_excel(writer, index = False)
-        
     if args.mode == "process":
         dir = args.directory
         outdir = args.outdir 
         n = args.thread
-        # align_mode = args.m
+        align_mode = args.m
         for row in sample_df.itertuples():
             print(f"Processing {row.id}")
             read = os.path.join(dir, row.id)
             # alignment step (output .bam and .stat)
             if args.reference == None:
-                align_command = f"chip_align.py align -read {read}_R1.fastq.gz {read}_R2.fastq.gz -outdir {outdir} -n {n}"
+                if align_mode == "SE":
+                    align_command = f"chip_align.py align -read {read}_R1.fastq.gz -outdir {outdir} -n {n}"
+                if align_mode == "PE":
+                    align_command = f"chip_align.py align -read {read}_R1.fastq.gz {read}_R2.fastq.gz -outdir {outdir} -n {n}"
             else:
                 print(f"Reference: {args.reference}")
-                align_command = f"chip_align.py align -read {read}_R1.fastq.gz {read}_R2.fastq.gz -ref {args.reference} -outdir {outdir} -n {n}"
-            # if args.force:
-            #     align_command += " -f "
+                if align_mode == "SE":
+                    align_command = f"chip_align.py align -read {read}_R1.fastq.gz -outdir {outdir} -n {n} -ref {args.reference}"
+                if align_mode == "PE":
+                    align_command = f"chip_align.py align -read {read}_R1.fastq.gz {read}_R2.fastq.gz -ref {args.reference} -outdir {outdir} -n {n}"
             print(align_command)
             subprocess.call(align_command, shell = True)
             # markdup step 

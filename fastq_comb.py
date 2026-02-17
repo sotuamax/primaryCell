@@ -16,6 +16,7 @@ def args_parser():
     "fastq_comb.py -dir run0001/ run0002/ run0003/ -dest merged_dir/ ")
     parser.add_argument("-dir", "--directory", nargs = "+", help = "master directories for  sequencing data")
     parser.add_argument("-dest", "--destination", default = ".", help = "destination to store the merged files")
+    parser.add_argument("-f", "--force", action = "store_true", help = "force to regenerate combined file even when the file already exists!")
     args=parser.parse_args()
     return args
 
@@ -41,7 +42,7 @@ def main():
             command = f"cat {all_file} > {new_file}.fastq.gz"
         else:
             command = f"mv {all_file} {new_file}.fastq.gz"
-        if not os.path.exists(new_file+".fastq.gz"):
+        if args.force or not os.path.exists(new_file+".fastq.gz"):
             print(command)
             subprocess.call(command, shell = True)
 
